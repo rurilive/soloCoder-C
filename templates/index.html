@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打码平台 - 验证码练习</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .type-selector {
+            margin-bottom: 25px;
+        }
+        .type-selector label {
+            display: block;
+            margin-bottom: 10px;
+            color: #555;
+            font-weight: 600;
+        }
+        .type-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .type-btn {
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        .type-btn:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        .type-btn.active {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+        .captcha-section {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .captcha-image-container {
+            background: #f5f5f5;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100px;
+        }
+        #captchaImage {
+            max-width: 100%;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        #captchaImage:hover {
+            transform: scale(1.02);
+        }
+        .refresh-hint {
+            color: #888;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .input-section {
+            margin-bottom: 25px;
+        }
+        .input-section label {
+            display: block;
+            margin-bottom: 10px;
+            color: #555;
+            font-weight: 600;
+        }
+        #userInput {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            text-align: center;
+            letter-spacing: 8px;
+            outline: none;
+            transition: border-color 0.3s;
+            text-transform: uppercase;
+        }
+        #userInput:focus {
+            border-color: #667eea;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+        .result-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+        }
+        .result-message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .result-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .stats {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-around;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 打码平台</h1>
+        <p class="subtitle">验证码识别练习 - 提升你的打码技能</p>
+
+        <div class="type-selector">
+            <label>选择验证码类型：</label>
+            <div class="type-buttons">
+                <button class="type-btn active" data-type="mixed">混合验证码</button>
+                <button class="type-btn" data-type="digits">数字验证码</button>
+                <button class="type-btn" data-type="letters">字母验证码</button>
+                <button class="type-btn" data-type="math">数学运算</button>
+            </div>
+        </div>
+
+        <div class="captcha-section">
+            <div class="captcha-image-container">
+                <img id="captchaImage" alt="验证码" title="点击刷新">
+            </div>
+            <p class="refresh-hint">💡 点击图片或按 F5 刷新验证码</p>
+        </div>
+
+        <div class="input-section">
+            <label for="userInput">输入验证码：</label>
+            <input type="text" id="userInput" placeholder="请输入验证码..." autocomplete="off">
+        </div>
+
+        <button class="submit-btn" id="submitBtn">提交验证</button>
+
+        <div id="resultMessage" class="result-message"></div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="totalCount">0</div>
+                <div class="stat-label">总次数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="correctCount">0</div>
+                <div class="stat-label">正确</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="accuracy">0%</div>
+                <div class="stat-label">正确率</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentCaptchaId = null;
+        let selectedType = 'mixed';
+        let stats = {
+            total: 0,
+            correct: 0
+        };
+
+        const captchaImage = document.getElementById('captchaImage');
+        const userInput = document.getElementById('userInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultMessage = document.getElementById('resultMessage');
+        const typeButtons = document.querySelectorAll('.type-btn');
+
+        async function loadCaptcha() {
+            try {
+                captchaImage.classList.add('loading');
+                const response = await fetch(`/api/captcha?type=${selectedType}&length=4`);
+                const data = await response.json();
+                currentCaptchaId = data.captcha_id;
+                captchaImage.src = `data:image/png;base64,${hexToBase64(data.image)}`;
+                userInput.value = '';
+                userInput.focus();
+                hideResult();
+            } catch (error) {
+                console.error('加载验证码失败:', error);
+            } finally {
+                captchaImage.classList.remove('loading');
+            }
+        }
+
+        function hexToBase64(hexString) {
+            const bytes = new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            return btoa(String.fromCharCode(...bytes));
+        }
+
+        function showResult(success, message) {
+            resultMessage.textContent = message;
+            resultMessage.className = `result-message ${success ? 'success' : 'error'}`;
+        }
+
+        function hideResult() {
+            resultMessage.className = 'result-message';
+        }
+
+        function updateStats() {
+            document.getElementById('totalCount').textContent = stats.total;
+            document.getElementById('correctCount').textContent = stats.correct;
+            const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+            document.getElementById('accuracy').textContent = `${accuracy}%`;
+        }
+
+        async function submitCaptcha() {
+            const inputValue = userInput.value.trim();
+            if (!inputValue) {
+                userInput.focus();
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                const formData = new FormData();
+                formData.append('captcha_id', currentCaptchaId);
+                formData.append('user_input', inputValue);
+
+                const response = await fetch('/api/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                stats.total++;
+                if (data.success) {
+                    stats.correct++;
+                    showResult(true, data.message);
+                    setTimeout(loadCaptcha, 1500);
+                } else {
+                    showResult(false, data.message);
+                    setTimeout(() => {
+                        if (confirm('验证失败！是否刷新重试？')) {
+                            loadCaptcha();
+                        }
+                    }, 1000);
+                }
+                updateStats();
+            } catch (error) {
+                console.error('验证失败:', error);
+                showResult(false, '验证出错，请重试');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        typeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                typeButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedType = btn.dataset.type;
+                loadCaptcha();
+            });
+        });
+
+        captchaImage.addEventListener('click', loadCaptcha);
+
+        submitBtn.addEventListener('click', submitCaptcha);
+
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitCaptcha();
+            }
+        });
+
+        loadCaptcha();
+    </script>
+</body>
+</html>
