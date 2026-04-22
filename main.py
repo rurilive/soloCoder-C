@@ -1,20 +1,21 @@
+import os
 import uuid
 from typing import Dict
-from fastapi import FastAPI, Request, Form, Response
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import JSONResponse, FileResponse
 from captcha_generator import CaptchaGenerator, CaptchaType
 
 app = FastAPI(title="打码平台", description="随机生成各种类型验证码的打码练习平台")
-templates = Jinja2Templates(directory="templates")
 captcha_gen = CaptchaGenerator(width=220, height=80)
 
 captcha_store: Dict[str, str] = {}
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+@app.get("/")
+async def index():
+    html_path = os.path.join(BASE_DIR, "templates", "index.html")
+    return FileResponse(html_path, media_type="text/html")
 
 
 @app.get("/api/captcha")
