@@ -5,247 +5,302 @@
 {% block content %}
 <section class="py-8">
     <div class="container">
-        <div class="card mb-6">
-            <div class="card-body">
-                <h2 class="text-xl font-bold mb-4">数据概览</h2>
-                <div class="grid grid-4 gap-4">
-                    <div class="p-4 bg-blue-50 rounded-lg text-center">
-                        <p id="stat-users" class="text-3xl font-bold text-blue-600">0</p>
-                        <p class="text-secondary text-sm">总用户数</p>
+        <div id="login-section" style="display: none;">
+            <div style="max-width: 400px; margin: 0 auto;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="text-xl font-bold text-center">管理后台登录</h2>
                     </div>
-                    <div class="p-4 bg-green-50 rounded-lg text-center">
-                        <p id="stat-houses" class="text-3xl font-bold text-green-600">0</p>
-                        <p class="text-secondary text-sm">总房源数</p>
-                    </div>
-                    <div class="p-4 bg-yellow-50 rounded-lg text-center">
-                        <p id="stat-views" class="text-3xl font-bold text-yellow-600">0</p>
-                        <p class="text-secondary text-sm">总浏览量</p>
-                    </div>
-                    <div class="p-4 bg-purple-50 rounded-lg text-center">
-                        <p id="stat-active" class="text-3xl font-bold text-purple-600">0</p>
-                        <p class="text-secondary text-sm">活跃用户</p>
+                    <div class="card-body">
+                        <form id="admin-login-form">
+                            <div class="form-group">
+                                <label class="form-label" for="admin-username">用户名</label>
+                                <input type="text" class="form-control" id="admin-username" name="username" placeholder="请输入用户名或邮箱" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label" for="admin-password">密码</label>
+                                <input type="password" class="form-control" id="admin-password" name="password" placeholder="请输入密码" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary btn-lg w-full">登录</button>
+                        </form>
+                        
+                        <div class="text-center mt-4">
+                            <p class="text-secondary text-sm">
+                                测试账号: admin / admin123
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="grid grid-3 gap-6">
-            <div class="sidebar" style="height: fit-content;">
-                <h3 class="font-bold mb-3">管理菜单</h3>
-                <div class="sidebar-item active" data-tab="users">
-                    👥 用户管理
+        <div id="no-permission-section" style="display: none;">
+            <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+                <div class="card">
+                    <div class="card-body py-8">
+                        <div class="text-6xl mb-4">🔒</div>
+                        <h2 class="text-xl font-bold mb-2">无权限访问</h2>
+                        <p class="text-secondary mb-4">您没有管理员权限，无法访问管理后台</p>
+                        <div class="flex gap-2 justify-center">
+                            <a href="/" class="btn btn-primary">返回首页</a>
+                            <button type="button" class="btn btn-secondary" id="logout-btn-admin">退出登录</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="sidebar-item" data-tab="houses">
-                    🏠 房源管理
-                </div>
-                <div class="sidebar-item" data-tab="comments">
-                    💬 评论管理
-                </div>
-                <div class="sidebar-item" data-tab="reports">
-                    ⚠️ 举报管理
-                </div>
-                <div class="sidebar-item" data-tab="faqs">
-                    ❓ 常见问题
+            </div>
+        </div>
+        
+        <div id="admin-content" style="display: none;">
+            <div class="card mb-6">
+                <div class="card-body">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">数据概览</h2>
+                        <div class="flex items-center gap-4">
+                            <span class="text-secondary text-sm">当前管理员: <span id="admin-username-display"></span></span>
+                            <button type="button" class="btn btn-sm btn-secondary" id="logout-btn">退出登录</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-4 gap-4">
+                        <div class="p-4 bg-blue-50 rounded-lg text-center">
+                            <p id="stat-users" class="text-3xl font-bold text-blue-600">0</p>
+                            <p class="text-secondary text-sm">总用户数</p>
+                        </div>
+                        <div class="p-4 bg-green-50 rounded-lg text-center">
+                            <p id="stat-houses" class="text-3xl font-bold text-green-600">0</p>
+                            <p class="text-secondary text-sm">总房源数</p>
+                        </div>
+                        <div class="p-4 bg-yellow-50 rounded-lg text-center">
+                            <p id="stat-views" class="text-3xl font-bold text-yellow-600">0</p>
+                            <p class="text-secondary text-sm">总浏览量</p>
+                        </div>
+                        <div class="p-4 bg-purple-50 rounded-lg text-center">
+                            <p id="stat-active" class="text-3xl font-bold text-purple-600">0</p>
+                            <p class="text-secondary text-sm">活跃用户</p>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="grid-cols-2" style="grid-column: span 2;">
-                <div id="tab-users" class="tab-content">
-                    <div class="card">
-                        <div class="card-header flex justify-between items-center">
-                            <h2 class="text-lg font-bold">用户管理</h2>
-                            <div class="flex gap-2">
-                                <select class="form-control" id="filter-role" style="width: 120px;">
-                                    <option value="">全部角色</option>
-                                    <option value="user">用户</option>
-                                    <option value="landlord">房东</option>
-                                    <option value="agent">业务员</option>
-                                    <option value="admin">管理员</option>
-                                </select>
-                                <select class="form-control" id="filter-status" style="width: 120px;">
-                                    <option value="">全部状态</option>
-                                    <option value="active">正常</option>
-                                    <option value="suspended">已封禁</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="overflow-x-auto">
-                                <table class="w-full">
-                                    <thead>
-                                        <tr class="border-b">
-                                            <th class="text-left py-3 px-2">ID</th>
-                                            <th class="text-left py-3 px-2">用户名</th>
-                                            <th class="text-left py-3 px-2">邮箱</th>
-                                            <th class="text-left py-3 px-2">角色</th>
-                                            <th class="text-left py-3 px-2">状态</th>
-                                            <th class="text-left py-3 px-2">注册时间</th>
-                                            <th class="text-left py-3 px-2">操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="users-table">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="users-pagination"></div>
-                        </div>
+            <div class="grid grid-3 gap-6">
+                <div class="sidebar" style="height: fit-content;">
+                    <h3 class="font-bold mb-3">管理菜单</h3>
+                    <div class="sidebar-item active" data-tab="users">
+                        👥 用户管理
+                    </div>
+                    <div class="sidebar-item" data-tab="houses">
+                        🏠 房源管理
+                    </div>
+                    <div class="sidebar-item" data-tab="comments">
+                        💬 评论管理
+                    </div>
+                    <div class="sidebar-item" data-tab="reports">
+                        ⚠️ 举报管理
+                    </div>
+                    <div class="sidebar-item" data-tab="faqs">
+                        ❓ 常见问题
                     </div>
                 </div>
                 
-                <div id="tab-houses" class="tab-content" style="display: none;">
-                    <div class="card">
-                        <div class="card-header flex justify-between items-center">
-                            <h2 class="text-lg font-bold">房源管理</h2>
-                            <div class="flex gap-2">
-                                <select class="form-control" id="filter-house-status" style="width: 120px;">
-                                    <option value="">全部状态</option>
-                                    <option value="pending">待审核</option>
-                                    <option value="published">已发布</option>
-                                    <option value="rented">已出租</option>
-                                    <option value="offline">已下架</option>
-                                </select>
-                                <select class="form-control" id="filter-house-type" style="width: 120px;">
-                                    <option value="">全部类型</option>
-                                    <option value="apartment">公寓</option>
-                                    <option value="house">住宅</option>
-                                    <option value="villa">别墅</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="overflow-x-auto">
-                                <table class="w-full">
-                                    <thead>
-                                        <tr class="border-b">
-                                            <th class="text-left py-3 px-2">ID</th>
-                                            <th class="text-left py-3 px-2">标题</th>
-                                            <th class="text-left py-3 px-2">城市</th>
-                                            <th class="text-left py-3 px-2">价格</th>
-                                            <th class="text-left py-3 px-2">状态</th>
-                                            <th class="text-left py-3 px-2">浏览</th>
-                                            <th class="text-left py-3 px-2">操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="houses-table">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="houses-pagination"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="tab-comments" class="tab-content" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="text-lg font-bold">评论管理</h2>
-                        </div>
-                        <div class="card-body">
-                            <div class="overflow-x-auto">
-                                <table class="w-full">
-                                    <thead>
-                                        <tr class="border-b">
-                                            <th class="text-left py-3 px-2">ID</th>
-                                            <th class="text-left py-3 px-2">内容</th>
-                                            <th class="text-left py-3 px-2">用户</th>
-                                            <th class="text-left py-3 px-2">房源</th>
-                                            <th class="text-left py-3 px-2">状态</th>
-                                            <th class="text-left py-3 px-2">时间</th>
-                                            <th class="text-left py-3 px-2">操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="comments-table">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="comments-pagination"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="tab-reports" class="tab-content" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="text-lg font-bold">举报管理</h2>
-                        </div>
-                        <div class="card-body">
-                            <div class="overflow-x-auto">
-                                <table class="w-full">
-                                    <thead>
-                                        <tr class="border-b">
-                                            <th class="text-left py-3 px-2">ID</th>
-                                            <th class="text-left py-3 px-2">举报类型</th>
-                                            <th class="text-left py-3 px-2">目标ID</th>
-                                            <th class="text-left py-3 px-2">举报人</th>
-                                            <th class="text-left py-3 px-2">状态</th>
-                                            <th class="text-left py-3 px-2">时间</th>
-                                            <th class="text-left py-3 px-2">操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="reports-table">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="reports-pagination"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="tab-faqs" class="tab-content" style="display: none;">
-                    <div class="card mb-4">
-                        <div class="card-header flex justify-between items-center">
-                            <h2 class="text-lg font-bold">添加常见问题</h2>
-                            <button type="button" class="btn btn-primary" id="add-faq-btn">
-                                ➕ 添加新问题
-                            </button>
-                        </div>
-                        <div class="card-body" id="faq-form-container" style="display: none;">
-                            <form id="faq-form">
-                                <input type="hidden" id="faq-id" value="">
-                                <div class="form-group">
-                                    <label class="form-label">问题 *</label>
-                                    <input type="text" class="form-control" id="faq-question" name="question" placeholder="请输入问题" required>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">答案 *</label>
-                                    <textarea class="form-control" id="faq-answer" name="answer" rows="4" placeholder="请输入答案" required></textarea>
-                                </div>
-                                <div class="grid grid-2 gap-4">
-                                    <div class="form-group">
-                                        <label class="form-label">排序</label>
-                                        <input type="number" class="form-control" id="faq-sort-order" name="sort_order" value="0" min="0">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">状态</label>
-                                        <select class="form-control" id="faq-is-active" name="is_active">
-                                            <option value="true">启用</option>
-                                            <option value="false">禁用</option>
-                                        </select>
-                                    </div>
-                                </div>
+                <div class="grid-cols-2" style="grid-column: span 2;">
+                    <div id="tab-users" class="tab-content">
+                        <div class="card">
+                            <div class="card-header flex justify-between items-center">
+                                <h2 class="text-lg font-bold">用户管理</h2>
                                 <div class="flex gap-2">
-                                    <button type="submit" class="btn btn-primary">保存</button>
-                                    <button type="button" class="btn btn-secondary" id="cancel-faq-btn">取消</button>
+                                    <select class="form-control" id="filter-role" style="width: 120px;">
+                                        <option value="">全部角色</option>
+                                        <option value="user">用户</option>
+                                        <option value="landlord">房东</option>
+                                        <option value="agent">业务员</option>
+                                        <option value="admin">管理员</option>
+                                    </select>
+                                    <select class="form-control" id="filter-status" style="width: 120px;">
+                                        <option value="">全部状态</option>
+                                        <option value="active">正常</option>
+                                        <option value="suspended">已封禁</option>
+                                    </select>
                                 </div>
-                            </form>
+                            </div>
+                            <div class="card-body">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead>
+                                            <tr class="border-b">
+                                                <th class="text-left py-3 px-2">ID</th>
+                                                <th class="text-left py-3 px-2">用户名</th>
+                                                <th class="text-left py-3 px-2">邮箱</th>
+                                                <th class="text-left py-3 px-2">角色</th>
+                                                <th class="text-left py-3 px-2">状态</th>
+                                                <th class="text-left py-3 px-2">注册时间</th>
+                                                <th class="text-left py-3 px-2">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="users-table">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="users-pagination"></div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="card">
-                        <div class="card-header flex justify-between items-center">
-                            <h2 class="text-lg font-bold">常见问题列表</h2>
-                            <div class="flex gap-2">
-                                <select class="form-control" id="filter-faq-status" style="width: 120px;">
-                                    <option value="">全部状态</option>
-                                    <option value="true">启用</option>
-                                    <option value="false">禁用</option>
-                                </select>
+                    <div id="tab-houses" class="tab-content" style="display: none;">
+                        <div class="card">
+                            <div class="card-header flex justify-between items-center">
+                                <h2 class="text-lg font-bold">房源管理</h2>
+                                <div class="flex gap-2">
+                                    <select class="form-control" id="filter-house-status" style="width: 120px;">
+                                        <option value="">全部状态</option>
+                                        <option value="pending">待审核</option>
+                                        <option value="published">已发布</option>
+                                        <option value="rented">已出租</option>
+                                        <option value="offline">已下架</option>
+                                    </select>
+                                    <select class="form-control" id="filter-house-type" style="width: 120px;">
+                                        <option value="">全部类型</option>
+                                        <option value="apartment">公寓</option>
+                                        <option value="house">住宅</option>
+                                        <option value="villa">别墅</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead>
+                                            <tr class="border-b">
+                                                <th class="text-left py-3 px-2">ID</th>
+                                                <th class="text-left py-3 px-2">标题</th>
+                                                <th class="text-left py-3 px-2">城市</th>
+                                                <th class="text-left py-3 px-2">价格</th>
+                                                <th class="text-left py-3 px-2">状态</th>
+                                                <th class="text-left py-3 px-2">浏览</th>
+                                                <th class="text-left py-3 px-2">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="houses-table">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="houses-pagination"></div>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <div id="faqs-list">
+                    </div>
+                    
+                    <div id="tab-comments" class="tab-content" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="text-lg font-bold">评论管理</h2>
                             </div>
-                            <div id="faqs-pagination"></div>
+                            <div class="card-body">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead>
+                                            <tr class="border-b">
+                                                <th class="text-left py-3 px-2">ID</th>
+                                                <th class="text-left py-3 px-2">内容</th>
+                                                <th class="text-left py-3 px-2">用户</th>
+                                                <th class="text-left py-3 px-2">房源</th>
+                                                <th class="text-left py-3 px-2">状态</th>
+                                                <th class="text-left py-3 px-2">时间</th>
+                                                <th class="text-left py-3 px-2">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="comments-table">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="comments-pagination"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="tab-reports" class="tab-content" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="text-lg font-bold">举报管理</h2>
+                            </div>
+                            <div class="card-body">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead>
+                                            <tr class="border-b">
+                                                <th class="text-left py-3 px-2">ID</th>
+                                                <th class="text-left py-3 px-2">举报类型</th>
+                                                <th class="text-left py-3 px-2">目标ID</th>
+                                                <th class="text-left py-3 px-2">举报人</th>
+                                                <th class="text-left py-3 px-2">状态</th>
+                                                <th class="text-left py-3 px-2">时间</th>
+                                                <th class="text-left py-3 px-2">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="reports-table">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="reports-pagination"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="tab-faqs" class="tab-content" style="display: none;">
+                        <div class="card mb-4">
+                            <div class="card-header flex justify-between items-center">
+                                <h2 class="text-lg font-bold">添加常见问题</h2>
+                                <button type="button" class="btn btn-primary" id="add-faq-btn">
+                                    ➕ 添加新问题
+                                </button>
+                            </div>
+                            <div class="card-body" id="faq-form-container" style="display: none;">
+                                <form id="faq-form">
+                                    <input type="hidden" id="faq-id" value="">
+                                    <div class="form-group">
+                                        <label class="form-label">问题 *</label>
+                                        <input type="text" class="form-control" id="faq-question" name="question" placeholder="请输入问题" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">答案 *</label>
+                                        <textarea class="form-control" id="faq-answer" name="answer" rows="4" placeholder="请输入答案" required></textarea>
+                                    </div>
+                                    <div class="grid grid-2 gap-4">
+                                        <div class="form-group">
+                                            <label class="form-label">排序</label>
+                                            <input type="number" class="form-control" id="faq-sort-order" name="sort_order" value="0" min="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">状态</label>
+                                            <select class="form-control" id="faq-is-active" name="is_active">
+                                                <option value="true">启用</option>
+                                                <option value="false">禁用</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button type="submit" class="btn btn-primary">保存</button>
+                                        <button type="button" class="btn btn-secondary" id="cancel-faq-btn">取消</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header flex justify-between items-center">
+                                <h2 class="text-lg font-bold">常见问题列表</h2>
+                                <div class="flex gap-2">
+                                    <select class="form-control" id="filter-faq-status" style="width: 120px;">
+                                        <option value="">全部状态</option>
+                                        <option value="true">启用</option>
+                                        <option value="false">禁用</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="faqs-list">
+                                </div>
+                                <div id="faqs-pagination"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -263,23 +318,84 @@ let faqsPagination = null;
 let currentTab = 'users';
 
 document.addEventListener('DOMContentLoaded', async () => {
+    initAdminPage();
+    
+    const adminLoginForm = document.getElementById('admin-login-form');
+    if (adminLoginForm) {
+        adminLoginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('admin-username').value;
+            const password = document.getElementById('admin-password').value;
+            
+            try {
+                await http.login(username, password);
+                Toast.success('登录成功');
+                initAdminPage();
+            } catch (error) {
+                Toast.error(error.message || '登录失败');
+            }
+        });
+    }
+    
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            http.logout();
+        });
+    }
+    
+    const logoutBtnAdmin = document.getElementById('logout-btn-admin');
+    if (logoutBtnAdmin) {
+        logoutBtnAdmin.addEventListener('click', () => {
+            http.logout();
+        });
+    }
+});
+
+async function initAdminPage() {
+    const loginSection = document.getElementById('login-section');
+    const noPermissionSection = document.getElementById('no-permission-section');
+    const adminContent = document.getElementById('admin-content');
+    
     if (!AppState.token) {
-        Toast.warning('请先登录');
-        window.location.href = '/login';
+        loginSection.style.display = 'block';
+        noPermissionSection.style.display = 'none';
+        adminContent.style.display = 'none';
         return;
     }
     
+    if (!AppState.currentUser) {
+        try {
+            await http.getCurrentUser();
+        } catch (error) {
+            loginSection.style.display = 'block';
+            noPermissionSection.style.display = 'none';
+            adminContent.style.display = 'none';
+            return;
+        }
+    }
+    
     if (AppState.currentUser && AppState.currentUser.role !== 'admin') {
-        Toast.warning('您没有管理员权限');
-        window.location.href = '/';
+        loginSection.style.display = 'none';
+        noPermissionSection.style.display = 'block';
+        adminContent.style.display = 'none';
         return;
+    }
+    
+    loginSection.style.display = 'none';
+    noPermissionSection.style.display = 'none';
+    adminContent.style.display = 'block';
+    
+    const adminUsernameDisplay = document.getElementById('admin-username-display');
+    if (adminUsernameDisplay) {
+        adminUsernameDisplay.textContent = AppState.currentUser?.nickname || AppState.currentUser?.username || '未知';
     }
     
     initPagination();
     bindTabEvents();
     await loadStats();
     await loadUsers();
-});
+}
 
 function initPagination() {
     usersPagination = new Pagination('#users-pagination', {
