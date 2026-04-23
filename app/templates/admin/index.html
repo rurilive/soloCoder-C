@@ -261,7 +261,7 @@ function bindTabEvents() {
 
 async function loadStats() {
     try {
-        const data = await http.get('/admin/stats');
+        const data = await http.get('/api/api/admin/stats');
         
         if (document.getElementById('stat-users')) {
             document.getElementById('stat-users').textContent = data.user_count || 0;
@@ -291,7 +291,7 @@ async function loadUsers(page = 1) {
         if (role) params.role = role;
         if (status) params.status = status;
         
-        const data = await http.get('/admin/users', params);
+        const data = await http.get('/api/admin/users', params);
         
         if (usersPagination) {
             usersPagination.update({
@@ -361,7 +361,7 @@ async function loadHouses(page = 1) {
         if (status) params.status = status;
         if (type) params.house_type = type;
         
-        const data = await http.get('/admin/houses', params);
+        const data = await http.get('/api/admin/houses', params);
         
         if (housesPagination) {
             housesPagination.update({
@@ -437,7 +437,7 @@ async function suspendUser(userId) {
     if (!confirm('确定要封禁该用户吗？')) return;
     
     try {
-        await http.put(`/admin/users/${userId}/status`, { status: 'suspended' });
+        await http.put(`/api/admin/users/${userId}/status`, { status: 'suspended' });
         Toast.success('用户已封禁');
         loadUsers();
     } catch (error) {
@@ -447,7 +447,7 @@ async function suspendUser(userId) {
 
 async function activateUser(userId) {
     try {
-        await http.put(`/admin/users/${userId}/status`, { status: 'active' });
+        await http.put(`/api/admin/users/${userId}/status`, { status: 'active' });
         Toast.success('用户已解封');
         loadUsers();
     } catch (error) {
@@ -459,7 +459,7 @@ async function promoteUser(userId, role) {
     if (!confirm(`确定要将该用户升级为${getRoleLabel(role)}吗？`)) return;
     
     try {
-        await http.put(`/admin/users/${userId}/role`, { role });
+        await http.put(`/api/admin/users/${userId}/role`, { role });
         Toast.success('用户角色已更新');
         loadUsers();
     } catch (error) {
@@ -471,7 +471,7 @@ async function offlineHouse(houseId) {
     if (!confirm('确定要下架该房源吗？')) return;
     
     try {
-        await http.put(`/admin/houses/${houseId}/status`, { status: 'offline' });
+        await http.put(`/api/admin/houses/${houseId}/status`, { status: 'offline' });
         Toast.success('房源已下架');
         loadHouses();
     } catch (error) {
@@ -481,7 +481,7 @@ async function offlineHouse(houseId) {
 
 async function publishHouse(houseId) {
     try {
-        await http.put(`/admin/houses/${houseId}/status`, { status: 'published' });
+        await http.put(`/api/admin/houses/${houseId}/status`, { status: 'published' });
         Toast.success('房源已上架');
         loadHouses();
     } catch (error) {
@@ -491,7 +491,7 @@ async function publishHouse(houseId) {
 
 async function featureHouse(houseId) {
     try {
-        await http.put(`/admin/houses/${houseId}/feature`, { is_featured: true });
+        await http.put(`/api/admin/houses/${houseId}/feature`, { is_featured: true });
         Toast.success('房源已设为推荐');
     } catch (error) {
         Toast.error(error.message || '操作失败');

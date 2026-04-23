@@ -15,7 +15,7 @@ from app.schemas.common import PaginatedParams, IDResponse
 from app.routers.auth import get_current_active_user
 from app.utils.response import success_response, paginated_response
 
-router = APIRouter(prefix="/messages", tags=["消息"])
+router = APIRouter(prefix="/api/messages", tags=["消息"])
 
 
 # ==================== 私信相关 ====================

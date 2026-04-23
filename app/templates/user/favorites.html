@@ -158,7 +158,7 @@ async function loadFavorites() {
 
 async function removeFavorite(houseId, btn) {
     try {
-        await http.delete(`/houses/${houseId}/favorite`);
+        await http.delete(`/api/houses/${houseId}/favorite`);
         Toast.success('已取消收藏');
         
         const card = btn.closest('.house-card');

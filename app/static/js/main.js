@@ -55,7 +55,7 @@ const http = {
             const formData = new FormData();
             formData.append('refresh_token', AppState.refreshToken);
 
-            const response = await fetch(`${API_BASE}/auth/refresh`, {
+            const response = await fetch(`${API_BASE}/api/auth/refresh`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${AppState.token}`,
@@ -129,7 +129,7 @@ const http = {
         formData.append('username', username);
         formData.append('password', password);
 
-        const response = await fetch(`${API_BASE}/auth/login`, {
+        const response = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
             body: formData,
         });
@@ -149,7 +149,7 @@ const http = {
 
     // 注册
     async register(userData) {
-        return this.post('/auth/register', userData);
+        return this.post('/api/auth/register', userData);
     },
 
     // 登出
@@ -167,7 +167,7 @@ const http = {
         if (!AppState.token) return null;
 
         try {
-            const data = await this.get('/auth/me');
+            const data = await this.get('/api/auth/me');
             AppState.currentUser = data;
             return data;
         } catch (e) {

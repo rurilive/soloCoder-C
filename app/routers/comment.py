@@ -15,7 +15,7 @@ from app.schemas.common import PaginatedParams, IDResponse, MessageResponse
 from app.routers.auth import get_current_active_user, get_current_landlord
 from app.utils.response import success_response, error_response, paginated_response
 
-router = APIRouter(prefix="/comments", tags=["评论"])
+router = APIRouter(prefix="/api/comments", tags=["评论"])
 
 
 # ==================== 评论相关 ====================

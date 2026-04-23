@@ -80,7 +80,7 @@ async function loadHotHouses() {
     if (!container) return;
 
     try {
-        const data = await http.get('/houses', { page: 1, page_size: 8, sort: 'views' });
+        const data = await http.get('/api/houses', { page: 1, page_size: 8, sort: 'views' });
         
         if (data.items && data.items.length > 0) {
             container.innerHTML = data.items.map(house => renderHouseCard(house)).join('');
@@ -189,12 +189,12 @@ async function toggleFavorite(houseId, btn) {
     
     try {
         if (isFavorite) {
-            await http.delete(`/houses/${houseId}/favorite`);
+            await http.delete(`/api/houses/${houseId}/favorite`);
             btn.innerHTML = '🤍';
             btn.dataset.isFavorite = 'false';
             Toast.success('已取消收藏');
         } else {
-            await http.post(`/houses/${houseId}/favorite`);
+            await http.post(`/api/houses/${houseId}/favorite`);
             btn.innerHTML = '❤️';
             btn.dataset.isFavorite = 'true';
             Toast.success('已添加收藏');

@@ -17,7 +17,7 @@ from app.schemas.common import PaginatedParams
 from app.routers.auth import get_current_admin
 from app.utils.response import success_response, paginated_response
 
-router = APIRouter(prefix="/admin", tags=["管理后台"])
+router = APIRouter(prefix="/api/admin", tags=["管理后台"])
 
 
 @router.get("/users")

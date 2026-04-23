@@ -15,7 +15,7 @@ from app.utils.security import get_password_hash
 from app.utils.response import success_response, error_response, paginated_response
 from app.utils.file_handler import save_image, get_file_url
 
-router = APIRouter(prefix="/users", tags=["用户"])
+router = APIRouter(prefix="/api/users", tags=["用户"])
 
 
 @router.get("/profile", response_model=UserResponse)

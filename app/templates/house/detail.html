@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadHouseDetail() {
     try {
-        houseData = await http.get(`/houses/${houseId}`);
+        houseData = await http.get(`/api/houses/${houseId}`);
         renderHouseDetail(houseData);
     } catch (error) {
         Toast.error(error.message || '加载房源详情失败');
@@ -587,9 +587,9 @@ async function toggleCommentLike(commentId, btn) {
     
     try {
         if (isLiked) {
-            await http.delete(`/comments/${commentId}/like`);
+            await http.delete(`/api/comments/${commentId}/like`);
         } else {
-            await http.post(`/comments/${commentId}/like`);
+            await http.post(`/api/comments/${commentId}/like`);
         }
         
         btn.dataset.liked = (!isLiked).toString();

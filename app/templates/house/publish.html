@@ -296,7 +296,7 @@ async function submitHouse(form) {
     }
     
     try {
-        const createData = await http.post('/houses', houseData);
+        const createData = await http.post('/api/houses', houseData);
         const houseId = createData.id;
         
         Toast.info('正在上传图片...');
@@ -306,7 +306,7 @@ async function submitHouse(form) {
             uploadFormData.append('images', file);
         });
         
-        await http.post(`/houses/${houseId}/images`, uploadFormData, true);
+        await http.post(`/api/houses/${houseId}/images`, uploadFormData, true);
         
         Toast.success('房源发布成功！');
         

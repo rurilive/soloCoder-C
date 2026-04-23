@@ -75,7 +75,7 @@ async function loadConversations() {
     const container = document.getElementById('conversation-list');
     
     try {
-        const data = await http.get('/messages/conversations', { page: 1, page_size: 50 });
+        const data = await http.get('/api/api/messages/conversations', { page: 1, page_size: 50 });
         
         if (data.items && data.items.length > 0) {
             container.innerHTML = data.items.map(conv => `
@@ -179,7 +179,7 @@ async function selectConversation(userId, element) {
     currentConversation = userId;
     
     try {
-        const data = await http.get(`/messages/${userId}`, { page: 1, page_size: 50 });
+        const data = await http.get(`/api/messages/${userId}`, { page: 1, page_size: 50 });
         renderMessages(data.items || []);
         
         document.getElementById('current-conversation-title').textContent = 
@@ -244,7 +244,7 @@ function bindEvents() {
                 
                 input.value = '';
                 
-                const data = await http.get(`/messages/${currentConversation}`, { page: 1, page_size: 50 });
+                const data = await http.get(`/api/messages/${currentConversation}`, { page: 1, page_size: 50 });
                 renderMessages(data.items || []);
                 
             } catch (error) {

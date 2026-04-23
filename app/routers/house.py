@@ -23,7 +23,7 @@ from app.utils.response import success_response, error_response, paginated_respo
 from app.utils.file_handler import save_image, save_video, get_file_url
 from app.utils.pagination import PaginationParams
 
-router = APIRouter(prefix="/houses", tags=["房源"])
+router = APIRouter(prefix="/api/houses", tags=["房源"])
 
 
 @router.post("", response_model=IDResponse)

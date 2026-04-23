@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadUserProfile() {
     try {
-        currentUser = await http.get('/auth/me');
+        currentUser = await http.get('/api/auth/me');
         
         document.getElementById('username').value = currentUser.username;
         document.getElementById('email').value = currentUser.email;
