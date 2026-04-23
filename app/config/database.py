@@ -44,7 +44,7 @@ async def init_db() -> None:
         # 导入所有模型以确保Base.metadata包含它们
         from app.models import User, House, HouseImage, Comment, Question, Answer
         from app.models import Favorite, FavoriteFolder, Like, Message, Notification
-        from app.models import ViewingAppointment, Report
+        from app.models import ViewingAppointment, Report, FAQ
 
         await conn.run_sync(Base.metadata.create_all)
 

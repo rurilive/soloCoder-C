@@ -467,10 +467,11 @@ async def get_statistics(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """获取统计数据"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+
     user_count_result = await session.execute(select(func.count(User.id)))
     total_users = user_count_result.scalar() or 0
-
-    from datetime import datetime, timedelta
 
     today = datetime.utcnow().date()
     today_start = datetime.combine(today, datetime.min.time())
@@ -494,8 +495,6 @@ async def get_statistics(
         select(func.count(House.id)).where(House.created_at >= today_start)
     )
     today_new_houses = today_house_result.scalar() or 0
-
-    from sqlalchemy import func
 
     role_stats_result = await session.execute(
         select(User.role, func.count(User.id)).group_by(User.role)
