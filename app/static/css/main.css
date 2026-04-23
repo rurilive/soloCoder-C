@@ -610,6 +610,57 @@ a:hover {
     color: var(--text-secondary);
 }
 
+/* 图片上传预览 */
+.image-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+}
+
+.image-preview-item {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 2px solid var(--border-color);
+    transition: border-color 0.2s;
+}
+
+.image-preview-item:hover {
+    border-color: var(--primary-color);
+}
+
+.image-preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.image-preview-remove {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    background-color: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.image-preview-remove:hover {
+    background-color: var(--danger-color);
+    transform: scale(1.1);
+}
+
 /* 分页 */
 .pagination {
     display: flex;
@@ -730,6 +781,9 @@ a:hover {
     .footer-content {
         grid-template-columns: repeat(2, 1fr);
     }
+    .image-preview-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
 }
 
 @media (max-width: 768px) {
@@ -759,5 +813,14 @@ a:hover {
     }
     .carousel-item {
         height: 250px;
+    }
+    .image-preview-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .image-preview-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }

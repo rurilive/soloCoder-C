@@ -464,12 +464,12 @@ class ImageUploader {
         let html = '';
         this.files.forEach((item, index) => {
             html += `
-                <div class="relative" style="width: 120px; height: 100px;">
+                <div class="image-preview-item relative">
                     <img src="${item.preview}" 
-                         class="w-full h-full object-cover rounded-lg" 
+                         class="image-preview-img" 
                          alt="preview">
                     <button type="button" 
-                            class="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                            class="image-preview-remove absolute"
                             data-index="${index}">
                         ×
                     </button>
@@ -479,7 +479,6 @@ class ImageUploader {
 
         this.preview.innerHTML = html;
 
-        // 绑定删除事件
         this.preview.querySelectorAll('button[data-index]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
