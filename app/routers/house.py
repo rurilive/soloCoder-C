@@ -26,38 +26,124 @@ from app.utils.pagination import PaginationParams
 router = APIRouter(prefix="/api/houses", tags=["房源"])
 
 
+def parse_orientation(orientation_str: Optional[str]) -> Optional[Orientation]:
+    """解析朝向字符串为枚举"""
+    from app.models import Orientation
+    
+    if not orientation_str:
+        return None
+    
+    orientation_map = {
+        "south": Orientation.SOUTH,
+        "north": Orientation.NORTH,
+        "east": Orientation.EAST,
+        "west": Orientation.WEST,
+        "southeast": Orientation.SOUTHEAST,
+        "southwest": Orientation.SOUTHWEST,
+        "northeast": Orientation.NORTHEAST,
+        "northwest": Orientation.NORTHWEST,
+    }
+    
+    lower_str = orientation_str.lower()
+    if lower_str in orientation_map:
+        return orientation_map[lower_str]
+    
+    try:
+        return Orientation(orientation_str)
+    except ValueError:
+        return None
+
+
+def parse_decoration(decoration_str: Optional[str]) -> Optional[Decoration]:
+    """解析装修字符串为枚举"""
+    from app.models import Decoration
+    
+    if not decoration_str:
+        return None
+    
+    decoration_map = {
+        "bare": Decoration.BARE,
+        "rough": Decoration.BARE,
+        "simple": Decoration.SIMPLE,
+        "standard": Decoration.SIMPLE,
+        "fine": Decoration.FINE,
+        "luxury": Decoration.LUXURY,
+    }
+    
+    lower_str = decoration_str.lower()
+    if lower_str in decoration_map:
+        return decoration_map[lower_str]
+    
+    try:
+        return Decoration(decoration_str)
+    except ValueError:
+        return None
+
+
+def parse_floor(floor_str: Optional[str]) -> tuple[Optional[int], Optional[int]]:
+    """解析楼层字符串 (如 "12/28") 为 (当前楼层, 总楼层)"""
+    if not floor_str:
+        return None, None
+    
+    if "/" in floor_str:
+        parts = floor_str.split("/")
+        try:
+            current = int(parts[0].strip()) if parts[0].strip() else None
+            total = int(parts[1].strip()) if len(parts) > 1 and parts[1].strip() else None
+            return current, total
+        except ValueError:
+            return None, None
+    
+    try:
+        current = int(floor_str.strip())
+        return current, None
+    except ValueError:
+        return None, None
+
+
+def facilities_list_to_dict(facilities_list: Optional[List[str]]) -> dict:
+    """将设施列表转换为字典"""
+    if not facilities_list:
+        return {}
+    
+    result = {}
+    for item in facilities_list:
+        if item:
+            result[item] = True
+    return result
+
+
 @router.post("", response_model=IDResponse)
 async def create_house(
     title: str = Form(...),
-    community: str = Form(...),
+    community: Optional[str] = Form(None),
     address: str = Form(...),
     price: float = Form(...),
     house_type: HouseType = Form(default=HouseType.ENTIRE),
     deposit_type: str = Form(default="押一付三"),
-    room_type: Optional[str] = Form(default=None),
-    area: Optional[float] = Form(default=None),
-    floor: Optional[int] = Form(default=None),
-    total_floors: Optional[int] = Form(default=None),
-    orientation: Optional[str] = Form(default=None),
-    decoration: Optional[str] = Form(default=None),
-    province: Optional[str] = Form(default=None),
-    city: Optional[str] = Form(default=None),
-    district: Optional[str] = Form(default=None),
-    facilities: Optional[str] = Form(default="{}"),
-    surrounding: Optional[str] = Form(default="{}"),
-    description: Optional[str] = Form(default=None),
-    rent_start_date: Optional[str] = Form(default=None),
-    min_rent_months: int = Form(default=1),
-    images: List[UploadFile] = File(default=None),
-    video: Optional[UploadFile] = File(default=None),
+    room_type: Optional[str] = Form(None),
+    area: Optional[float] = Form(None),
+    floor: Optional[int] = Form(None),
+    total_floors: Optional[int] = Form(None),
+    orientation: Optional[str] = Form(None),
+    decoration: Optional[str] = Form(None),
+    province: Optional[str] = Form(None),
+    city: Optional[str] = Form(None),
+    district: Optional[str] = Form(None),
+    facilities: Optional[str] = Form("{}"),
+    surrounding: Optional[str] = Form("{}"),
+    description: Optional[str] = Form(None),
+    rent_start_date: Optional[str] = Form(None),
+    min_rent_months: int = Form(1),
+    images: List[UploadFile] = File(None),
+    video: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_landlord),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """发布房源"""
+    """发布房源 (Form 格式)"""
     from datetime import date
     from app.models import Orientation, Decoration
 
-    # 解析JSON字段
     try:
         facilities_dict = json.loads(facilities) if facilities else {}
         surrounding_dict = json.loads(surrounding) if surrounding else {}
@@ -67,7 +153,6 @@ async def create_house(
             detail="设施或周边配置格式错误",
         )
 
-    # 解析日期
     rent_start = None
     if rent_start_date:
         try:
@@ -79,26 +164,15 @@ async def create_house(
                 detail="日期格式错误，应为 YYYY-MM-DD",
             )
 
-    # 解析枚举
-    orientation_enum = None
-    if orientation:
-        try:
-            orientation_enum = Orientation(orientation)
-        except ValueError:
-            pass
+    orientation_enum = parse_orientation(orientation)
+    decoration_enum = parse_decoration(decoration)
 
-    decoration_enum = None
-    if decoration:
-        try:
-            decoration_enum = Decoration(decoration)
-        except ValueError:
-            pass
+    community_value = community or title[:100] if not community else address[:50] if len(address) > 50 else address
 
-    # 创建房源
     new_house = House(
         user_id=current_user.id,
         title=title,
-        community=community,
+        community=community_value,
         address=address,
         price=price,
         house_type=house_type,
@@ -121,9 +195,8 @@ async def create_house(
     )
 
     session.add(new_house)
-    await session.flush()  # 先刷新以获取ID
+    await session.flush()
 
-    # 处理图片上传
     main_image_url = None
     if images:
         for i, image_file in enumerate(images):
@@ -131,7 +204,6 @@ async def create_house(
                 filename = await save_image(image_file)
                 image_url = get_file_url(filename, file_type="image")
 
-                # 第一张图片设为主图
                 if i == 0:
                     main_image_url = image_url
                     is_main = True
@@ -145,14 +217,12 @@ async def create_house(
                     is_main=is_main,
                 )
                 session.add(house_image)
-            except Exception as e:
-                # 忽略单个图片上传失败不影响整体
+            except Exception:
                 pass
 
         if main_image_url:
             new_house.main_image = main_image_url
 
-    # 处理视频上传
     if video:
         try:
             filename = await save_video(video)
@@ -161,6 +231,92 @@ async def create_house(
         except Exception:
             pass
 
+    await session.commit()
+    await session.refresh(new_house)
+
+    return IDResponse(id=new_house.id, message="房源发布成功")
+
+
+@router.post("/create", response_model=IDResponse)
+async def create_house_json(
+    house_data: HouseCreate,
+    current_user: User = Depends(get_current_landlord),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """发布房源 (JSON 格式 - 用于前端表单)"""
+    from app.models import Orientation, Decoration
+
+    orientation_enum = None
+    if house_data.orientation:
+        orientation_enum = house_data.orientation
+    elif house_data.orientation_str:
+        orientation_enum = parse_orientation(house_data.orientation_str)
+
+    decoration_enum = None
+    if house_data.decoration:
+        decoration_enum = house_data.decoration
+    elif house_data.decoration_str:
+        decoration_enum = parse_decoration(house_data.decoration_str)
+
+    floor_num = house_data.floor
+    total_floors_num = house_data.total_floors
+    if house_data.floor_str and not floor_num:
+        floor_num, total_floors_num = parse_floor(house_data.floor_str)
+
+    facilities_dict = house_data.facilities or {}
+    if house_data.facilities_list:
+        facilities_dict = facilities_list_to_dict(house_data.facilities_list)
+
+    community_value = house_data.community
+    if not community_value:
+        if house_data.district:
+            community_value = f"{house_data.district}房源"
+        elif house_data.city:
+            community_value = f"{house_data.city}房源"
+        else:
+            community_value = house_data.title[:50] if len(house_data.title) > 50 else house_data.title
+
+    room_type_value = house_data.room_type
+    if not room_type_value and house_data.bedrooms is not None:
+        parts = []
+        if house_data.bedrooms >= 0:
+            parts.append(f"{house_data.bedrooms}室")
+        if house_data.livingrooms and house_data.livingrooms > 0:
+            parts.append(f"{house_data.livingrooms}厅")
+        if house_data.bathrooms and house_data.bathrooms > 0:
+            parts.append(f"{house_data.bathrooms}卫")
+        if parts:
+            room_type_value = "".join(parts)
+
+    new_house = House(
+        user_id=current_user.id,
+        title=house_data.title,
+        community=community_value,
+        address=house_data.address,
+        price=house_data.price,
+        house_type=house_data.house_type,
+        deposit_type=house_data.deposit_type,
+        room_type=room_type_value,
+        bedrooms=house_data.bedrooms,
+        livingrooms=house_data.livingrooms,
+        bathrooms=house_data.bathrooms,
+        area=house_data.area,
+        floor=floor_num,
+        total_floors=total_floors_num,
+        orientation=orientation_enum,
+        decoration=decoration_enum,
+        province=house_data.province,
+        city=house_data.city,
+        district=house_data.district,
+        facilities=facilities_dict,
+        surrounding=house_data.surrounding,
+        description=house_data.description,
+        rent_start_date=house_data.rent_start_date,
+        min_rent_months=house_data.min_rent_months,
+        status=HouseStatus.PUBLISHED,
+    )
+
+    session.add(new_house)
     await session.commit()
     await session.refresh(new_house)
 

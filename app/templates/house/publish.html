@@ -268,24 +268,29 @@ async function submitHouse(form) {
         facilities.push(cb.value);
     });
     
+    const bedroomsStr = formData.get('bedrooms');
+    const livingroomsStr = formData.get('livingrooms');
+    const bathroomsStr = formData.get('bathrooms');
+    
     const houseData = {
         title: formData.get('title'),
         city: formData.get('city'),
         district: formData.get('district') || '',
         address: formData.get('address'),
         price: parseFloat(formData.get('price')),
-        area: parseFloat(formData.get('area')),
-        bedrooms: parseInt(formData.get('bedrooms') || '0'),
-        livingrooms: parseInt(formData.get('livingrooms') || '0'),
-        bathrooms: parseInt(formData.get('bathrooms') || '0'),
-        house_type: formData.get('house_type'),
-        orientation: formData.get('orientation') || '',
-        decoration: formData.get('decoration') || '',
-        floor: formData.get('floor') || '',
+        area: formData.get('area') ? parseFloat(formData.get('area')) : null,
+        bedrooms: bedroomsStr !== '' && bedroomsStr !== null ? parseInt(bedroomsStr) : null,
+        livingrooms: livingroomsStr !== '' && livingroomsStr !== null ? parseInt(livingroomsStr) : null,
+        bathrooms: bathroomsStr !== '' && bathroomsStr !== null ? parseInt(bathroomsStr) : null,
+        property_type: formData.get('house_type') || '',
+        orientation_str: formData.get('orientation') || '',
+        decoration_str: formData.get('decoration') || '',
+        floor_str: formData.get('floor') || '',
         description: formData.get('description') || '',
         contact_name: formData.get('contact_name') || '',
         contact_phone: formData.get('contact_phone') || '',
-        facilities: facilities
+        facilities_list: facilities,
+        facilities: {}
     };
     
     const files = imageUploader.getFiles();
@@ -296,7 +301,7 @@ async function submitHouse(form) {
     }
     
     try {
-        const createData = await http.post('/api/houses', houseData);
+        const createData = await http.post('/api/houses/create', houseData);
         const houseId = createData.id;
         
         Toast.info('正在上传图片...');

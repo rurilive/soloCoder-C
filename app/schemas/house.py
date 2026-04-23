@@ -17,28 +17,38 @@ from app.models import (
 class HouseBase(BaseModel):
     """房源基础模型"""
 
-    title: str = Field(..., min_length=5, max_length=200, description="房源标题")
-    community: str = Field(..., min_length=2, max_length=100, description="小区名称")
-    address: str = Field(..., min_length=5, max_length=300, description="详细地址")
+    title: str = Field(..., min_length=2, max_length=200, description="房源标题")
+    community: Optional[str] = Field(None, max_length=100, description="小区名称")
+    address: str = Field(..., min_length=2, max_length=300, description="详细地址")
     province: Optional[str] = Field(None, max_length=50, description="省")
     city: Optional[str] = Field(None, max_length=50, description="市")
     district: Optional[str] = Field(None, max_length=50, description="区")
     price: float = Field(..., gt=0, description="月租价格")
     deposit_type: str = Field(default="押一付三", max_length=50, description="押金方式")
-    house_type: HouseType = Field(default=HouseType.ENTIRE, description="房屋类型")
+    house_type: HouseType = Field(default=HouseType.ENTIRE, description="出租方式(整租/合租)")
+    property_type: Optional[str] = Field(None, max_length=50, description="房屋类型(公寓/住宅/别墅等)")
     room_type: Optional[str] = Field(None, max_length=50, description="户型")
+    bedrooms: Optional[int] = Field(None, ge=0, description="卧室数量")
+    livingrooms: Optional[int] = Field(None, ge=0, description="客厅数量")
+    bathrooms: Optional[int] = Field(None, ge=0, description="卫生间数量")
     area: Optional[float] = Field(None, gt=0, description="面积(平方米)")
     floor: Optional[int] = Field(None, ge=0, description="所在楼层")
     total_floors: Optional[int] = Field(None, ge=0, description="总楼层")
+    floor_str: Optional[str] = Field(None, max_length=50, description="楼层字符串(如 12/28)")
     orientation: Optional[Orientation] = Field(None, description="朝向")
+    orientation_str: Optional[str] = Field(None, max_length=50, description="朝向字符串")
     decoration: Optional[Decoration] = Field(None, description="装修程度")
+    decoration_str: Optional[str] = Field(None, max_length=50, description="装修程度字符串")
     facilities: Dict = Field(default_factory=dict, description="设施配置")
+    facilities_list: Optional[List[str]] = Field(None, description="设施列表")
     surrounding: Dict = Field(default_factory=dict, description="周边配套")
     description: Optional[str] = Field(None, description="详细描述")
     main_image: Optional[str] = Field(None, description="主图URL")
     video_url: Optional[str] = Field(None, description="视频URL")
     rent_start_date: Optional[date] = Field(None, description="可入住日期")
     min_rent_months: int = Field(default=1, ge=1, description="最短租期(月)")
+    contact_name: Optional[str] = Field(None, max_length=50, description="联系人姓名")
+    contact_phone: Optional[str] = Field(None, max_length=20, description="联系电话")
 
 
 class HouseCreate(HouseBase):
@@ -89,6 +99,8 @@ class HouseResponse(HouseBase):
     is_recommended: bool
     created_at: datetime
     updated_at: datetime
+    main_image: Optional[str] = None
+    video_url: Optional[str] = None
 
     model_config = {
         "from_attributes": True,
