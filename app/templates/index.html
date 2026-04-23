@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="container">
+        <h1>租房管理系统</h1>
+        <p>为您提供便捷、安全的租房服务体验</p>
+        <div class="search-box">
+            <input type="text" class="form-control" id="search-keyword" placeholder="搜索小区、地铁、商圈...">
+            <button class="btn btn-lg btn-primary" id="search-btn">搜索</button>
+        </div>
+    </div>
+</section>
+
+<section class="py-8">
+    <div class="container">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">热门房源</h2>
+            <a href="/houses" class="text-primary">查看更多 →</a>
+        </div>
+        
+        <div id="hot-houses" class="grid grid-4">
+        </div>
+    </div>
+</section>
+
+<section class="py-8 bg-white">
+    <div class="container">
+        <div class="grid grid-3 gap-6">
+            <div class="card p-6 text-center">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🏘️</div>
+                <h3 class="text-lg font-semibold mb-2">海量房源</h3>
+                <p class="text-secondary">覆盖全国各城市，真实房源信息</p>
+            </div>
+            <div class="card p-6 text-center">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🔒</div>
+                <h3 class="text-lg font-semibold mb-2">安全保障</h3>
+                <p class="text-secondary">房东实名认证，房源信息审核</p>
+            </div>
+            <div class="card p-6 text-center">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">💬</div>
+                <h3 class="text-lg font-semibold mb-2">便捷沟通</h3>
+                <p class="text-secondary">实时在线沟通，问题即时解答</p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    const searchBtn = document.getElementById('search-btn');
+    const searchKeyword = document.getElementById('search-keyword');
+
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            const keyword = searchKeyword.value.trim();
+            if (keyword) {
+                window.location.href = `/houses?keyword=${encodeURIComponent(keyword)}`;
+            } else {
+                window.location.href = '/houses';
+            }
+        });
+
+        searchKeyword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchBtn.click();
+            }
+        });
+    }
+
+    await loadHotHouses();
+});
+
+async function loadHotHouses() {
+    const container = document.getElementById('hot-houses');
+    if (!container) return;
+
+    try {
+        const data = await http.get('/houses', { page: 1, page_size: 8, sort: 'views' });
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map(house => renderHouseCard(house)).join('');
+            
+            container.querySelectorAll('.house-card-favorite').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const houseId = btn.dataset.houseId;
+                    await toggleFavorite(houseId, btn);
+                });
+            });
+        } else {
+            container.innerHTML = `
+                <div class="grid-1 text-center py-8">
+                    <p class="text-secondary">暂无房源</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载热门房源失败:', error);
+        container.innerHTML = `
+            <div class="grid-1 text-center py-8">
+                <p class="text-secondary">加载失败，请稍后重试</p>
+            </div>
+        `;
+    }
+}
+
+function renderHouseCard(house) {
+    const image = house.images && house.images.length > 0 
+        ? house.images[0].url 
+        : 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd';
+    
+    const price = house.price.toLocaleString();
+    
+    return `
+        <div class="card house-card">
+            <a href="/houses/${house.id}">
+                <div class="house-card-image">
+                    <img src="${image}" alt="${house.title}" onerror="this.src='https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd'">
+                    <span class="house-card-badge">${getHouseTypeLabel(house.house_type)}</span>
+                    <button class="house-card-favorite" data-house-id="${house.id}" data-is-favorite="${house.is_favorited || false}">
+                        ${house.is_favorited ? '❤️' : '🤍'}
+                    </button>
+                </div>
+                <div class="house-card-content">
+                    <h3 class="house-card-title">${house.title}</h3>
+                    <div class="house-card-price">${price}<span>/月</span></div>
+                    <div class="house-card-info">
+                        <span>${house.area}㎡</span>
+                        <span>${house.bedrooms}室${house.livingrooms}厅</span>
+                        <span>${getOrientationLabel(house.orientation)}</span>
+                    </div>
+                </div>
+                <div class="house-card-footer">
+                    <span>${house.city} ${house.district || ''}</span>
+                    <span>${house.views} 浏览</span>
+                </div>
+            </a>
+        </div>
+    `;
+}
+
+function getHouseTypeLabel(type) {
+    const labels = {
+        'apartment': '公寓',
+        'house': '住宅',
+        'villa': '别墅',
+        'shop': '商铺',
+        'office': '写字楼'
+    };
+    return labels[type] || type;
+}
+
+function getOrientationLabel(orientation) {
+    const labels = {
+        'south': '朝南',
+        'north': '朝北',
+        'east': '朝东',
+        'west': '朝西',
+        'southeast': '东南',
+        'southwest': '西南',
+        'northeast': '东北',
+        'northwest': '西北'
+    };
+    return labels[orientation] || orientation;
+}
+
+async function toggleFavorite(houseId, btn) {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+
+    const isFavorite = btn.dataset.isFavorite === 'true';
+    
+    try {
+        if (isFavorite) {
+            await http.delete(`/houses/${houseId}/favorite`);
+            btn.innerHTML = '🤍';
+            btn.dataset.isFavorite = 'false';
+            Toast.success('已取消收藏');
+        } else {
+            await http.post(`/houses/${houseId}/favorite`);
+            btn.innerHTML = '❤️';
+            btn.dataset.isFavorite = 'true';
+            Toast.success('已添加收藏');
+        }
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}消息中心 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-bold">消息中心</h2>
+                    <button id="mark-all-read-btn" class="btn btn-sm btn-secondary">
+                        全部标记已读
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" style="min-height: 500px;">
+                <div class="grid grid-3" style="gap: 0;">
+                    <div class="border-r" style="min-height: 500px;">
+                        <div class="p-2 border-b">
+                            <input type="text" class="form-control" id="search-conversation" placeholder="搜索会话...">
+                        </div>
+                        <div id="conversation-list" class="overflow-y-auto" style="max-height: 450px;">
+                        </div>
+                    </div>
+                    
+                    <div class="grid-cols-2 border-r" style="min-height: 500px;">
+                        <div class="p-3 border-b flex justify-between items-center">
+                            <h3 id="current-conversation-title" class="font-semibold">选择一个会话</h3>
+                        </div>
+                        <div id="message-list" class="p-3 overflow-y-auto" style="height: 380px;">
+                            <div class="text-center text-secondary py-8">
+                                选择左侧会话查看消息
+                            </div>
+                        </div>
+                        <div class="p-3 border-t">
+                            <form id="message-form" class="flex gap-2">
+                                <input type="text" class="form-control flex-1" id="message-input" name="content" placeholder="输入消息...">
+                                <button type="submit" class="btn btn-primary">发送</button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div style="min-height: 500px;">
+                        <div class="p-3 border-b">
+                            <h3 class="font-semibold">通知</h3>
+                        </div>
+                        <div id="notification-list" class="overflow-y-auto" style="max-height: 450px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentConversation = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    await loadConversations();
+    await loadNotifications();
+    bindEvents();
+});
+
+async function loadConversations() {
+    const container = document.getElementById('conversation-list');
+    
+    try {
+        const data = await http.get('/messages/conversations', { page: 1, page_size: 50 });
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map(conv => `
+                <div class="conversation-item p-3 border-b cursor-pointer hover:bg-gray-50 ${conv.unread_count > 0 ? 'bg-blue-50' : ''}" 
+                     data-id="${conv.other_user?.id || conv.id}">
+                    <div class="flex gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                            👤
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-start">
+                                <p class="font-semibold text-sm truncate">
+                                    ${conv.other_user?.nickname || conv.other_user?.username || '用户'}
+                                </p>
+                                <span class="text-secondary text-xs flex-shrink-0">
+                                    ${formatTime(conv.last_message_time || conv.created_at)}
+                                </span>
+                            </div>
+                            <p class="text-secondary text-sm truncate mt-1">
+                                ${conv.last_message || '暂无消息'}
+                            </p>
+                        </div>
+                        ${conv.unread_count > 0 ? `
+                            <span class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full flex-shrink-0">
+                                ${conv.unread_count}
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            container.querySelectorAll('.conversation-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const userId = item.dataset.id;
+                    selectConversation(userId, item);
+                });
+            });
+        } else {
+            container.innerHTML = `
+                <div class="text-center text-secondary py-8">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
+                    <p>暂无私信</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载会话列表失败:', error);
+        container.innerHTML = `
+            <div class="text-center text-secondary py-8">
+                加载失败
+            </div>
+        `;
+    }
+}
+
+async function loadNotifications() {
+    const container = document.getElementById('notification-list');
+    
+    try {
+        const data = await http.get('/notifications', { page: 1, page_size: 20 });
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map(n => `
+                <div class="notification-item p-3 border-b cursor-pointer hover:bg-gray-50 ${!n.is_read ? 'bg-blue-50' : ''}" 
+                     data-id="${n.id}">
+                    <p class="text-sm">${n.content}</p>
+                    <p class="text-secondary text-xs mt-1">${formatTime(n.created_at)}</p>
+                </div>
+            `).join('');
+            
+            container.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const id = item.dataset.id;
+                    markNotificationRead(id, item);
+                });
+            });
+        } else {
+            container.innerHTML = `
+                <div class="text-center text-secondary py-8">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">🔔</div>
+                    <p>暂无通知</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载通知失败:', error);
+        container.innerHTML = `
+            <div class="text-center text-secondary py-8">
+                加载失败
+            </div>
+        `;
+    }
+}
+
+async function selectConversation(userId, element) {
+    document.querySelectorAll('.conversation-item').forEach(el => {
+        el.classList.remove('bg-blue-500', 'text-white');
+    });
+    element.classList.add('bg-blue-500', 'text-white');
+    
+    currentConversation = userId;
+    
+    try {
+        const data = await http.get(`/messages/${userId}`, { page: 1, page_size: 50 });
+        renderMessages(data.items || []);
+        
+        document.getElementById('current-conversation-title').textContent = 
+            element.querySelector('.font-semibold')?.textContent || '用户';
+        
+    } catch (error) {
+        Toast.error(error.message || '加载消息失败');
+    }
+}
+
+function renderMessages(messages) {
+    const container = document.getElementById('message-list');
+    
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-secondary py-8">
+                暂无消息
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = messages.map(msg => {
+        const isSent = msg.sender_id === AppState.currentUser?.id;
+        return `
+            <div class="message-box ${isSent ? 'sent' : ''} mb-4">
+                <div class="message-avatar">👤</div>
+                <div class="message-content">
+                    <div class="message-bubble">${msg.content}</div>
+                    <div class="message-time">${formatTime(msg.created_at)}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+function bindEvents() {
+    const messageForm = document.getElementById('message-form');
+    const markAllReadBtn = document.getElementById('mark-all-read-btn');
+    
+    if (messageForm) {
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!currentConversation) {
+                Toast.warning('请先选择一个会话');
+                return;
+            }
+            
+            const input = document.getElementById('message-input');
+            const content = input.value.trim();
+            
+            if (!content) return;
+            
+            try {
+                await http.post('/messages', {
+                    receiver_id: currentConversation,
+                    content: content
+                });
+                
+                input.value = '';
+                
+                const data = await http.get(`/messages/${currentConversation}`, { page: 1, page_size: 50 });
+                renderMessages(data.items || []);
+                
+            } catch (error) {
+                Toast.error(error.message || '发送失败');
+            }
+        });
+    }
+    
+    if (markAllReadBtn) {
+        markAllReadBtn.addEventListener('click', async () => {
+            try {
+                await http.post('/notifications/read-all');
+                Toast.success('已全部标记为已读');
+                await loadNotifications();
+            } catch (error) {
+                Toast.error(error.message || '操作失败');
+            }
+        });
+    }
+}
+
+async function markNotificationRead(id, element) {
+    try {
+        await http.post(`/notifications/${id}/read`);
+        element.classList.remove('bg-blue-50');
+    } catch (error) {
+        console.error('标记已读失败:', error);
+    }
+}
+
+function formatTime(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`;
+    
+    return date.toLocaleDateString('zh-CN');
+}
+</script>
+{% endblock %}

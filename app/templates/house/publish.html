@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}发布房源 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-xl font-bold">发布房源</h2>
+                    <p class="text-secondary text-sm mt-1">请填写以下信息发布您的房源</p>
+                </div>
+                <div class="card-body">
+                    <form id="publish-form" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label class="form-label">房源标题 *</label>
+                            <input type="text" class="form-control" name="title" placeholder="例如：精装两居室 近地铁 拎包入住" required>
+                        </div>
+                        
+                        <div class="grid grid-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">城市 *</label>
+                                <select class="form-control" name="city" required>
+                                    <option value="">请选择城市</option>
+                                    <option value="北京">北京</option>
+                                    <option value="上海">上海</option>
+                                    <option value="广州">广州</option>
+                                    <option value="深圳">深圳</option>
+                                    <option value="杭州">杭州</option>
+                                    <option value="南京">南京</option>
+                                    <option value="成都">成都</option>
+                                    <option value="武汉">武汉</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">区域</label>
+                                <input type="text" class="form-control" name="district" placeholder="例如：朝阳区">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">详细地址 *</label>
+                            <input type="text" class="form-control" name="address" placeholder="请输入详细地址" required>
+                        </div>
+                        
+                        <div class="grid grid-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">月租金 (元/月) *</label>
+                                <input type="number" class="form-control" name="price" placeholder="请输入月租金" min="1" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">面积 (㎡) *</label>
+                                <input type="number" class="form-control" name="area" placeholder="请输入房屋面积" min="1" step="0.1" required>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-3 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">卧室数量 *</label>
+                                <input type="number" class="form-control" name="bedrooms" placeholder="例如：2" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">客厅数量</label>
+                                <input type="number" class="form-control" name="livingrooms" placeholder="例如：1" min="0" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">卫生间数量</label>
+                                <input type="number" class="form-control" name="bathrooms" placeholder="例如：1" min="0" value="1">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">房屋类型 *</label>
+                                <select class="form-control" name="house_type" required>
+                                    <option value="">请选择类型</option>
+                                    <option value="apartment">公寓</option>
+                                    <option value="house">住宅</option>
+                                    <option value="villa">别墅</option>
+                                    <option value="shop">商铺</option>
+                                    <option value="office">写字楼</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">朝向</label>
+                                <select class="form-control" name="orientation">
+                                    <option value="">请选择朝向</option>
+                                    <option value="south">朝南</option>
+                                    <option value="north">朝北</option>
+                                    <option value="east">朝东</option>
+                                    <option value="west">朝西</option>
+                                    <option value="southeast">东南</option>
+                                    <option value="southwest">西南</option>
+                                    <option value="northeast">东北</option>
+                                    <option value="northwest">西北</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">装修情况</label>
+                                <select class="form-control" name="decoration">
+                                    <option value="">请选择装修</option>
+                                    <option value="rough">毛坯</option>
+                                    <option value="simple">简装</option>
+                                    <option value="standard">中装</option>
+                                    <option value="fine">精装</option>
+                                    <option value="luxury">豪装</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">所在楼层</label>
+                                <input type="text" class="form-control" name="floor" placeholder="例如：12/28">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">房源图片 *</label>
+                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                                <input type="file" id="image-input" name="images" multiple accept="image/*" class="hidden">
+                                <button type="button" id="upload-btn" class="btn btn-secondary">
+                                    📷 选择图片
+                                </button>
+                                <p class="text-secondary text-sm mt-2">支持 JPG、PNG 格式，最多上传 10 张</p>
+                                <div id="image-preview" class="flex flex-wrap gap-2 mt-4">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">配套设施</label>
+                            <div class="grid grid-4 gap-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="wifi">
+                                    <span class="text-sm">WiFi</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="aircon">
+                                    <span class="text-sm">空调</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="heater">
+                                    <span class="text-sm">暖气</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="tv">
+                                    <span class="text-sm">电视</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="fridge">
+                                    <span class="text-sm">冰箱</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="washer">
+                                    <span class="text-sm">洗衣机</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="waterheater">
+                                    <span class="text-sm">热水器</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="bed">
+                                    <span class="text-sm">床</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="wardrobe">
+                                    <span class="text-sm">衣柜</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="sofa">
+                                    <span class="text-sm">沙发</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="desk">
+                                    <span class="text-sm">书桌</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" name="facilities" value="chair">
+                                    <span class="text-sm">椅子</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">房源描述</label>
+                            <textarea class="form-control" name="description" rows="6" placeholder="请详细描述您的房源，包括房屋特点、周边配套、交通情况等..."></textarea>
+                        </div>
+                        
+                        <div class="grid grid-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">联系人姓名</label>
+                                <input type="text" class="form-control" name="contact_name" placeholder="请输入联系人姓名">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">联系电话</label>
+                                <input type="tel" class="form-control" name="contact_phone" placeholder="请输入联系电话">
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-4">
+                            <button type="submit" class="btn btn-primary btn-lg flex-1">发布房源</button>
+                            <button type="reset" class="btn btn-secondary btn-lg">重置</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let imageUploader = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    initImageUploader();
+    initForm();
+});
+
+function initImageUploader() {
+    const imageInput = document.getElementById('image-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    const previewContainer = document.getElementById('image-preview');
+    
+    imageUploader = new ImageUploader(imageInput, previewContainer, {
+        maxFiles: 10,
+        maxSize: 5 * 1024 * 1024
+    });
+    
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', () => {
+            imageInput.click();
+        });
+    }
+}
+
+function initForm() {
+    const form = document.getElementById('publish-form');
+    
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await submitHouse(form);
+        });
+    }
+}
+
+async function submitHouse(form) {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    const formData = new FormData(form);
+    
+    const facilities = [];
+    form.querySelectorAll('input[name="facilities"]:checked').forEach(cb => {
+        facilities.push(cb.value);
+    });
+    
+    const houseData = {
+        title: formData.get('title'),
+        city: formData.get('city'),
+        district: formData.get('district') || '',
+        address: formData.get('address'),
+        price: parseFloat(formData.get('price')),
+        area: parseFloat(formData.get('area')),
+        bedrooms: parseInt(formData.get('bedrooms') || '0'),
+        livingrooms: parseInt(formData.get('livingrooms') || '0'),
+        bathrooms: parseInt(formData.get('bathrooms') || '0'),
+        house_type: formData.get('house_type'),
+        orientation: formData.get('orientation') || '',
+        decoration: formData.get('decoration') || '',
+        floor: formData.get('floor') || '',
+        description: formData.get('description') || '',
+        contact_name: formData.get('contact_name') || '',
+        contact_phone: formData.get('contact_phone') || '',
+        facilities: facilities
+    };
+    
+    const files = imageUploader.getFiles();
+    
+    if (files.length === 0) {
+        Toast.warning('请至少上传一张图片');
+        return;
+    }
+    
+    try {
+        const createData = await http.post('/houses', houseData);
+        const houseId = createData.id;
+        
+        Toast.info('正在上传图片...');
+        
+        const uploadFormData = new FormData();
+        files.forEach((file, index) => {
+            uploadFormData.append('images', file);
+        });
+        
+        await http.post(`/houses/${houseId}/images`, uploadFormData, true);
+        
+        Toast.success('房源发布成功！');
+        
+        setTimeout(() => {
+            window.location.href = `/houses/${houseId}`;
+        }, 1500);
+        
+    } catch (error) {
+        Toast.error(error.message || '发布房源失败');
+        console.error(error);
+    }
+}
+</script>
+{% endblock %}

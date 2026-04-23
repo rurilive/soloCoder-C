@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}个人中心 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div class="grid grid-3 gap-6">
+            <div class="sidebar" style="height: fit-content;">
+                <div class="text-center mb-6 pb-6 border-b">
+                    <div id="user-avatar" class="w-20 h-20 rounded-full bg-gray-200 mx-auto mb-3 flex items-center justify-center text-3xl">
+                        👤
+                    </div>
+                    <h3 id="user-name" class="font-bold"></h3>
+                    <p id="user-role" class="text-secondary text-sm"></p>
+                </div>
+                
+                <div class="sidebar-item active">
+                    <a href="/user/profile" class="block">📋 个人资料</a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="/user/favorites" class="block">❤️ 我的收藏</a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="/messages" class="block">💬 消息中心</a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="/publish" class="block">🏠 发布房源</a>
+                </div>
+            </div>
+            
+            <div class="grid-cols-2">
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h2 class="text-lg font-bold">个人信息</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="profile-form">
+                            <div class="form-group">
+                                <label class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="username" name="username" disabled>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">昵称</label>
+                                <input type="text" class="form-control" id="nickname" name="nickname" placeholder="请输入昵称">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">邮箱</label>
+                                <input type="email" class="form-control" id="email" name="email" disabled>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">手机号</label>
+                                <input type="tel" class="form-control" id="phone" name="phone" placeholder="请输入手机号">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">个人简介</label>
+                                <textarea class="form-control" id="bio" name="bio" rows="3" placeholder="请输入个人简介"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">保存修改</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h2 class="text-lg font-bold">头像设置</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="flex items-center gap-6">
+                            <div id="avatar-preview" class="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-4xl overflow-hidden">
+                                👤
+                            </div>
+                            <div>
+                                <input type="file" id="avatar-input" accept="image/*" class="hidden">
+                                <button type="button" id="upload-avatar-btn" class="btn btn-primary">
+                                    📷 选择头像
+                                </button>
+                                <p class="text-secondary text-sm mt-2">支持 JPG、PNG 格式，建议尺寸 200x200</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h2 class="text-lg font-bold">修改密码</h2>
+                    </div>
+                    <div class="card-body">
+                        <form id="password-form">
+                            <div class="form-group">
+                                <label class="form-label">当前密码</label>
+                                <input type="password" class="form-control" name="old_password" placeholder="请输入当前密码" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">新密码</label>
+                                <input type="password" class="form-control" name="new_password" placeholder="请输入新密码（至少6位）" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">确认新密码</label>
+                                <input type="password" class="form-control" name="confirm_password" placeholder="请再次输入新密码" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">修改密码</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="text-lg font-bold">升级房东</h2>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-secondary mb-4">升级为房东后，您可以发布房源并享受更多服务。</p>
+                        <button id="become-landlord-btn" class="btn btn-success">
+                            🏠 升级为房东
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentUser = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    await loadUserProfile();
+    bindEvents();
+});
+
+async function loadUserProfile() {
+    try {
+        currentUser = await http.get('/auth/me');
+        
+        document.getElementById('username').value = currentUser.username;
+        document.getElementById('email').value = currentUser.email;
+        document.getElementById('nickname').value = currentUser.nickname || '';
+        document.getElementById('phone').value = currentUser.phone || '';
+        document.getElementById('bio').value = currentUser.bio || '';
+        
+        document.getElementById('user-name').textContent = currentUser.nickname || currentUser.username;
+        document.getElementById('user-role').textContent = getRoleLabel(currentUser.role);
+        
+        if (currentUser.role === 'landlord' || currentUser.role === 'agent' || currentUser.role === 'admin') {
+            const btn = document.getElementById('become-landlord-btn');
+            if (btn) {
+                btn.textContent = '✅ 已是房东';
+                btn.disabled = true;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-secondary');
+            }
+        }
+        
+        if (currentUser.avatar) {
+            updateAvatarPreview(currentUser.avatar);
+        }
+        
+    } catch (error) {
+        Toast.error(error.message || '加载用户信息失败');
+        console.error(error);
+    }
+}
+
+function bindEvents() {
+    const profileForm = document.getElementById('profile-form');
+    const passwordForm = document.getElementById('password-form');
+    const avatarInput = document.getElementById('avatar-input');
+    const uploadAvatarBtn = document.getElementById('upload-avatar-btn');
+    const becomeLandlordBtn = document.getElementById('become-landlord-btn');
+    
+    if (profileForm) {
+        profileForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await updateProfile();
+        });
+    }
+    
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await changePassword(passwordForm);
+        });
+    }
+    
+    if (uploadAvatarBtn && avatarInput) {
+        uploadAvatarBtn.addEventListener('click', () => {
+            avatarInput.click();
+        });
+        
+        avatarInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                if (!file.type.startsWith('image/')) {
+                    Toast.error('只能上传图片文件');
+                    return;
+                }
+                if (file.size > 2 * 1024 * 1024) {
+                    Toast.error('图片大小不能超过2MB');
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    updateAvatarPreview(e.target.result);
+                };
+                reader.readAsDataURL(file);
+                
+                uploadAvatar(file);
+            }
+        });
+    }
+    
+    if (becomeLandlordBtn) {
+        becomeLandlordBtn.addEventListener('click', async () => {
+            try {
+                await http.post('/user/become-landlord');
+                Toast.success('升级成功！');
+                becomeLandlordBtn.textContent = '✅ 已是房东';
+                becomeLandlordBtn.disabled = true;
+                becomeLandlordBtn.classList.remove('btn-success');
+                becomeLandlordBtn.classList.add('btn-secondary');
+            } catch (error) {
+                Toast.error(error.message || '升级失败');
+            }
+        });
+    }
+}
+
+function updateAvatarPreview(src) {
+    const preview = document.getElementById('avatar-preview');
+    const userAvatar = document.getElementById('user-avatar');
+    
+    if (preview) {
+        preview.innerHTML = `<img src="${src}" class="w-full h-full object-cover" alt="头像">`;
+    }
+    if (userAvatar) {
+        userAvatar.innerHTML = `<img src="${src}" class="w-full h-full object-cover" alt="头像">`;
+    }
+}
+
+async function updateProfile() {
+    const data = {
+        nickname: document.getElementById('nickname').value || null,
+        phone: document.getElementById('phone').value || null,
+        bio: document.getElementById('bio').value || null
+    };
+    
+    try {
+        await http.put('/user/profile', data);
+        Toast.success('保存成功');
+        
+        const nameEl = document.getElementById('user-name');
+        if (nameEl && data.nickname) {
+            nameEl.textContent = data.nickname;
+        }
+    } catch (error) {
+        Toast.error(error.message || '保存失败');
+    }
+}
+
+async function changePassword(form) {
+    const formData = FormUtils.getData(form);
+    
+    if (formData.new_password !== formData.confirm_password) {
+        Toast.error('两次输入的密码不一致');
+        return;
+    }
+    
+    if (formData.new_password.length < 6) {
+        Toast.error('新密码至少需要6位');
+        return;
+    }
+    
+    try {
+        await http.put('/user/password', {
+            old_password: formData.old_password,
+            new_password: formData.new_password
+        });
+        
+        Toast.success('密码修改成功，请重新登录');
+        form.reset();
+        
+        setTimeout(() => {
+            http.logout();
+        }, 1500);
+        
+    } catch (error) {
+        Toast.error(error.message || '密码修改失败');
+    }
+}
+
+async function uploadAvatar(file) {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    try {
+        Toast.info('正在上传头像...');
+        const result = await http.post('/user/avatar', formData, true);
+        
+        if (result.url) {
+            updateAvatarPreview(result.url);
+        }
+        
+        Toast.success('头像上传成功');
+    } catch (error) {
+        Toast.error(error.message || '头像上传失败');
+    }
+}
+
+function getRoleLabel(role) {
+    const labels = {
+        'user': '普通用户',
+        'landlord': '房东',
+        'agent': '业务员',
+        'admin': '管理员'
+    };
+    return labels[role] || role;
+}
+</script>
+{% endblock %}

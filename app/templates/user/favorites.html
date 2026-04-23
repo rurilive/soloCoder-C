@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}我的收藏 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div class="grid grid-3 gap-6">
+            <div class="sidebar" style="height: fit-content;">
+                <div class="text-center mb-6 pb-6 border-b">
+                    <div class="w-20 h-20 rounded-full bg-gray-200 mx-auto mb-3 flex items-center justify-center text-3xl">
+                        👤
+                    </div>
+                    <h3 class="font-bold">用户中心</h3>
+                </div>
+                
+                <div class="sidebar-item">
+                    <a href="/user/profile" class="block">📋 个人资料</a>
+                </div>
+                <div class="sidebar-item active">
+                    <a href="/user/favorites" class="block">❤️ 我的收藏</a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="/messages" class="block">💬 消息中心</a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="/publish" class="block">🏠 发布房源</a>
+                </div>
+            </div>
+            
+            <div class="grid-cols-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="text-lg font-bold">我的收藏</h2>
+                        <p class="text-secondary text-sm">共 <span id="favorites-count">0</span> 套房源</p>
+                    </div>
+                    <div class="card-body">
+                        <div id="favorites-list" class="grid grid-2 gap-4">
+                        </div>
+                        <div id="pagination-container" class="mt-6"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+const pageSize = 12;
+let pagination = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    initPagination();
+    await loadFavorites();
+});
+
+function initPagination() {
+    pagination = new Pagination('#pagination-container', {
+        currentPage: currentPage,
+        pageSize: pageSize,
+        total: 0,
+        onPageChange: (page) => {
+            currentPage = page;
+            loadFavorites();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+}
+
+async function loadFavorites() {
+    const container = document.getElementById('favorites-list');
+    
+    try {
+        const data = await http.get('/user/favorites', { page: currentPage, page_size: pageSize });
+        
+        const countEl = document.getElementById('favorites-count');
+        if (countEl) {
+            countEl.textContent = data.total || 0;
+        }
+        
+        if (pagination) {
+            pagination.update({
+                currentPage: data.page || currentPage,
+                total: data.total || 0
+            });
+        }
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map(item => {
+                const house = item.house;
+                if (!house) return '';
+                
+                const image = house.images && house.images.length > 0 
+                    ? house.images[0].url 
+                    : 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd';
+                
+                return `
+                    <div class="card house-card relative">
+                        <a href="/houses/${house.id}">
+                            <div class="house-card-image">
+                                <img src="${image}" alt="${house.title}" onerror="this.src='https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd'">
+                                <span class="house-card-badge">${getHouseTypeLabel(house.house_type)}</span>
+                            </div>
+                            <div class="house-card-content">
+                                <h3 class="house-card-title">${house.title}</h3>
+                                <div class="house-card-price">${house.price.toLocaleString()}<span>/月</span></div>
+                                <div class="house-card-info">
+                                    <span>${house.area}㎡</span>
+                                    <span>${house.bedrooms}室${house.livingrooms}厅</span>
+                                </div>
+                            </div>
+                            <div class="house-card-footer">
+                                <span>${house.city} ${house.district || ''}</span>
+                            </div>
+                        </a>
+                        <button class="house-card-favorite" data-house-id="${house.id}" data-is-favorite="true" style="z-index: 10;">
+                            ❤️
+                        </button>
+                    </div>
+                `;
+            }).join('');
+            
+            container.querySelectorAll('.house-card-favorite').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const houseId = btn.dataset.houseId;
+                    await removeFavorite(houseId, btn);
+                });
+            });
+        } else {
+            container.innerHTML = `
+                <div class="grid-1 text-center py-8">
+                    <div style="font-size: 4rem; margin-bottom: 1rem;">📭</div>
+                    <p class="text-secondary mb-4">暂无收藏的房源</p>
+                    <a href="/houses" class="btn btn-primary">去逛逛</a>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载收藏列表失败:', error);
+        container.innerHTML = `
+            <div class="grid-1 text-center py-8">
+                <p class="text-secondary">加载失败，请稍后重试</p>
+            </div>
+        `;
+    }
+}
+
+async function removeFavorite(houseId, btn) {
+    try {
+        await http.delete(`/houses/${houseId}/favorite`);
+        Toast.success('已取消收藏');
+        
+        const card = btn.closest('.house-card');
+        if (card) {
+            card.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => {
+                card.remove();
+                loadFavorites();
+            }, 300);
+        }
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
+}
+
+function getHouseTypeLabel(type) {
+    const labels = {
+        'apartment': '公寓',
+        'house': '住宅',
+        'villa': '别墅',
+        'shop': '商铺',
+        'office': '写字楼'
+    };
+    return labels[type] || type;
+}
+</script>
+
+<style>
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(20px); }
+}
+</style>
+{% endblock %}

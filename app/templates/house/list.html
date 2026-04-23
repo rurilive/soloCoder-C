@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}房源列表 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div class="card mb-6">
+            <div class="card-body">
+                <form id="filter-form" class="grid grid-4 gap-4">
+                    <div class="form-group mb-0">
+                        <label class="form-label">关键词</label>
+                        <input type="text" class="form-control" id="keyword" name="keyword" placeholder="搜索小区、地铁、商圈...">
+                    </div>
+                    
+                    <div class="form-group mb-0">
+                        <label class="form-label">城市</label>
+                        <select class="form-control" id="city" name="city">
+                            <option value="">全部城市</option>
+                            <option value="北京">北京</option>
+                            <option value="上海">上海</option>
+                            <option value="广州">广州</option>
+                            <option value="深圳">深圳</option>
+                            <option value="杭州">杭州</option>
+                            <option value="南京">南京</option>
+                            <option value="成都">成都</option>
+                            <option value="武汉">武汉</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-0">
+                        <label class="form-label">价格范围</label>
+                        <select class="form-control" id="price_range" name="price_range">
+                            <option value="">不限</option>
+                            <option value="0-2000">2000元以下</option>
+                            <option value="2000-4000">2000-4000元</option>
+                            <option value="4000-6000">4000-6000元</option>
+                            <option value="6000-8000">6000-8000元</option>
+                            <option value="8000-10000">8000-10000元</option>
+                            <option value="10000-999999">10000元以上</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-0">
+                        <label class="form-label">户型</label>
+                        <select class="form-control" id="bedrooms" name="bedrooms">
+                            <option value="">不限</option>
+                            <option value="1">一居</option>
+                            <option value="2">二居</option>
+                            <option value="3">三居</option>
+                            <option value="4">四居及以上</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-0">
+                        <label class="form-label">房屋类型</label>
+                        <select class="form-control" id="house_type" name="house_type">
+                            <option value="">不限</option>
+                            <option value="apartment">公寓</option>
+                            <option value="house">住宅</option>
+                            <option value="villa">别墅</option>
+                            <option value="shop">商铺</option>
+                            <option value="office">写字楼</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-0">
+                        <label class="form-label">装修情况</label>
+                        <select class="form-control" id="decoration" name="decoration">
+                            <option value="">不限</option>
+                            <option value="rough">毛坯</option>
+                            <option value="simple">简装</option>
+                            <option value="standard">中装</option>
+                            <option value="fine">精装</option>
+                            <option value="luxury">豪装</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-0">
+                        <label class="form-label">排序方式</label>
+                        <select class="form-control" id="sort" name="sort">
+                            <option value="">默认排序</option>
+                            <option value="price_asc">价格从低到高</option>
+                            <option value="price_desc">价格从高到低</option>
+                            <option value="area_asc">面积从小到大</option>
+                            <option value="area_desc">面积从大到小</option>
+                            <option value="views">浏览量最高</option>
+                            <option value="newest">最新发布</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group mb-0 flex items-end gap-2">
+                        <button type="submit" class="btn btn-primary">搜索</button>
+                        <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="flex justify-between items-center mb-4">
+            <p class="text-secondary">共 <span id="total-count">0</span> 套房源</p>
+        </div>
+        
+        <div id="houses-list" class="grid grid-4">
+        </div>
+        
+        <div id="pagination-container"></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+const pageSize = 12;
+let pagination = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    initPagination();
+    loadHouses();
+    
+    const filterForm = document.getElementById('filter-form');
+    const resetBtn = document.getElementById('reset-btn');
+    
+    if (filterForm) {
+        filterForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            currentPage = 1;
+            loadHouses();
+        });
+    }
+    
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            filterForm.reset();
+            currentPage = 1;
+            loadHouses();
+        });
+    }
+});
+
+function initPagination() {
+    pagination = new Pagination('#pagination-container', {
+        currentPage: currentPage,
+        pageSize: pageSize,
+        total: 0,
+        onPageChange: (page) => {
+            currentPage = page;
+            loadHouses();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+}
+
+function getFilterParams() {
+    const params = {
+        page: currentPage,
+        page_size: pageSize
+    };
+    
+    const keyword = document.getElementById('keyword')?.value;
+    const city = document.getElementById('city')?.value;
+    const priceRange = document.getElementById('price_range')?.value;
+    const bedrooms = document.getElementById('bedrooms')?.value;
+    const houseType = document.getElementById('house_type')?.value;
+    const decoration = document.getElementById('decoration')?.value;
+    const sort = document.getElementById('sort')?.value;
+    
+    if (keyword) params.keyword = keyword;
+    if (city) params.city = city;
+    
+    if (priceRange) {
+        const [minPrice, maxPrice] = priceRange.split('-').map(Number);
+        if (minPrice) params.min_price = minPrice;
+        if (maxPrice) params.max_price = maxPrice;
+    }
+    
+    if (bedrooms) {
+        const b = parseInt(bedrooms);
+        if (b >= 4) {
+            params.min_bedrooms = 4;
+        } else {
+            params.bedrooms = b;
+        }
+    }
+    
+    if (houseType) params.house_type = houseType;
+    if (decoration) params.decoration = decoration;
+    if (sort) params.sort = sort;
+    
+    return params;
+}
+
+async function loadHouses() {
+    const container = document.getElementById('houses-list');
+    if (!container) return;
+    
+    const params = getFilterParams();
+    
+    try {
+        const data = await http.get('/houses', params);
+        
+        const totalCount = document.getElementById('total-count');
+        if (totalCount) {
+            totalCount.textContent = data.total || 0;
+        }
+        
+        if (pagination) {
+            pagination.update({
+                currentPage: data.page || currentPage,
+                total: data.total || 0
+            });
+        }
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map(house => renderHouseCard(house)).join('');
+            
+            container.querySelectorAll('.house-card-favorite').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const houseId = btn.dataset.houseId;
+                    await toggleFavorite(houseId, btn);
+                });
+            });
+        } else {
+            container.innerHTML = `
+                <div class="grid-1 text-center py-8">
+                    <p class="text-secondary">暂无符合条件的房源</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载房源失败:', error);
+        container.innerHTML = `
+            <div class="grid-1 text-center py-8">
+                <p class="text-secondary">加载失败，请稍后重试</p>
+            </div>
+        `;
+    }
+}
+
+function renderHouseCard(house) {
+    const image = house.images && house.images.length > 0 
+        ? house.images[0].url 
+        : 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd';
+    
+    const price = house.price.toLocaleString();
+    
+    return `
+        <div class="card house-card">
+            <a href="/houses/${house.id}">
+                <div class="house-card-image">
+                    <img src="${image}" alt="${house.title}" onerror="this.src='https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd'">
+                    <span class="house-card-badge">${getHouseTypeLabel(house.house_type)}</span>
+                    <button class="house-card-favorite" data-house-id="${house.id}" data-is-favorite="${house.is_favorited || false}">
+                        ${house.is_favorited ? '❤️' : '🤍'}
+                    </button>
+                </div>
+                <div class="house-card-content">
+                    <h3 class="house-card-title">${house.title}</h3>
+                    <div class="house-card-price">${price}<span>/月</span></div>
+                    <div class="house-card-info">
+                        <span>${house.area}㎡</span>
+                        <span>${house.bedrooms}室${house.livingrooms}厅</span>
+                        <span>${getOrientationLabel(house.orientation)}</span>
+                    </div>
+                </div>
+                <div class="house-card-footer">
+                    <span>${house.city} ${house.district || ''}</span>
+                    <span>${house.views} 浏览</span>
+                </div>
+            </a>
+        </div>
+    `;
+}
+
+function getHouseTypeLabel(type) {
+    const labels = {
+        'apartment': '公寓',
+        'house': '住宅',
+        'villa': '别墅',
+        'shop': '商铺',
+        'office': '写字楼'
+    };
+    return labels[type] || type;
+}
+
+function getOrientationLabel(orientation) {
+    const labels = {
+        'south': '朝南',
+        'north': '朝北',
+        'east': '朝东',
+        'west': '朝西',
+        'southeast': '东南',
+        'southwest': '西南',
+        'northeast': '东北',
+        'northwest': '西北'
+    };
+    return labels[orientation] || orientation;
+}
+
+async function toggleFavorite(houseId, btn) {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+
+    const isFavorite = btn.dataset.isFavorite === 'true';
+    
+    try {
+        if (isFavorite) {
+            await http.delete(`/houses/${houseId}/favorite`);
+            btn.innerHTML = '🤍';
+            btn.dataset.isFavorite = 'false';
+            Toast.success('已取消收藏');
+        } else {
+            await http.post(`/houses/${houseId}/favorite`);
+            btn.innerHTML = '❤️';
+            btn.dataset.isFavorite = 'true';
+            Toast.success('已添加收藏');
+        }
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,684 @@
+{% extends "base.html" %}
+
+{% block title %}房源详情 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div class="grid grid-2 gap-6">
+            <div id="carousel-container">
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h1 id="house-title" class="text-2xl font-bold mb-2"></h1>
+                    <div id="house-price" class="text-3xl font-bold text-danger mb-4">
+                    </div>
+                    
+                    <div id="house-tags" class="tags mb-4">
+                    </div>
+                    
+                    <div class="grid grid-2 gap-4 mb-4">
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <span class="text-secondary text-sm">面积</span>
+                            <p id="house-area" class="font-semibold"></p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <span class="text-secondary text-sm">户型</span>
+                            <p id="house-layout" class="font-semibold"></p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <span class="text-secondary text-sm">朝向</span>
+                            <p id="house-orientation" class="font-semibold"></p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <span class="text-secondary text-sm">装修</span>
+                            <p id="house-decoration" class="font-semibold"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <p class="text-secondary text-sm mb-1">位置</p>
+                        <p id="house-location" class="font-medium"></p>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <p class="text-secondary text-sm mb-1">发布时间</p>
+                        <p id="house-publish-time" class="font-medium"></p>
+                    </div>
+                    
+                    <div class="flex gap-2 mb-4">
+                        <button id="favorite-btn" class="btn btn-secondary flex-1">
+                            🤍 收藏
+                        </button>
+                        <button id="share-btn" class="btn btn-secondary flex-1">
+                            📤 分享
+                        </button>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button id="contact-btn" class="btn btn-primary flex-1">
+                            💬 联系房东
+                        </button>
+                        <button id="question-btn" class="btn btn-secondary flex-1">
+                            ❓ 我要提问
+                        </button>
+                    </div>
+                    
+                    <div class="mt-4 pt-4 border-t">
+                        <div class="flex items-center gap-3">
+                            <div id="landlord-avatar" class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-xl">
+                                👤
+                            </div>
+                            <div>
+                                <p id="landlord-name" class="font-semibold"></p>
+                                <p id="landlord-role" class="text-secondary text-sm"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-3 gap-6 mt-6">
+            <div class="grid-cols-2">
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h3 class="text-lg font-bold">房源描述</h3>
+                    </div>
+                    <div id="house-description" class="card-body">
+                    </div>
+                </div>
+                
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <h3 class="text-lg font-bold">配套设施</h3>
+                    </div>
+                    <div id="house-facilities" class="card-body">
+                    </div>
+                </div>
+                
+                <div class="card mb-6">
+                    <div class="card-header flex justify-between items-center">
+                        <h3 class="text-lg font-bold">用户评论</h3>
+                        <button id="add-comment-btn" class="btn btn-sm btn-primary">
+                            发表评论
+                        </button>
+                    </div>
+                    <div id="comments-container" class="card-body">
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header flex justify-between items-center">
+                        <h3 class="text-lg font-bold">问答专区</h3>
+                        <button id="add-question-btn" class="btn btn-sm btn-primary">
+                            我要提问
+                        </button>
+                    </div>
+                    <div id="questions-container" class="card-body">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <h4 class="font-bold mb-3">联系房东</h4>
+                <div id="contact-info" class="mb-4">
+                </div>
+                
+                <h4 class="font-bold mb-3 mt-6">房源统计</h4>
+                <div class="grid grid-2 gap-2 text-center">
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <p id="stat-views" class="text-xl font-bold text-primary">0</p>
+                        <p class="text-secondary text-sm">浏览量</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <p id="stat-likes" class="text-xl font-bold text-primary">0</p>
+                        <p class="text-secondary text-sm">点赞数</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <p id="stat-favorites" class="text-xl font-bold text-primary">0</p>
+                        <p class="text-secondary text-sm">收藏数</p>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <p id="stat-comments" class="text-xl font-bold text-primary">0</p>
+                        <p class="text-secondary text-sm">评论数</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="comment-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+    <div class="bg-white rounded-lg w-full max-w-md mx-4">
+        <div class="p-4 border-b flex justify-between items-center">
+            <h3 class="font-bold">发表评论</h3>
+            <button id="close-comment-modal" class="text-secondary">&times;</button>
+        </div>
+        <div class="p-4">
+            <form id="comment-form">
+                <div class="form-group">
+                    <label class="form-label">评论内容</label>
+                    <textarea class="form-control" id="comment-content" name="content" rows="4" placeholder="请输入评论内容..." required></textarea>
+                </div>
+                <div class="flex gap-2 justify-end">
+                    <button type="button" id="cancel-comment" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">提交</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="question-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+    <div class="bg-white rounded-lg w-full max-w-md mx-4">
+        <div class="p-4 border-b flex justify-between items-center">
+            <h3 class="font-bold">我要提问</h3>
+            <button id="close-question-modal" class="text-secondary">&times;</button>
+        </div>
+        <div class="p-4">
+            <form id="question-form">
+                <div class="form-group">
+                    <label class="form-label">问题标题</label>
+                    <input type="text" class="form-control" id="question-title" name="title" placeholder="请输入问题标题..." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">问题内容</label>
+                    <textarea class="form-control" id="question-content" name="content" rows="4" placeholder="请输入问题内容..."></textarea>
+                </div>
+                <div class="flex gap-2 justify-end">
+                    <button type="button" id="cancel-question" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">提交</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const houseId = "{{ house_id }}";
+let houseData = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadHouseDetail();
+    await loadComments();
+    await loadQuestions();
+    bindEvents();
+});
+
+async function loadHouseDetail() {
+    try {
+        houseData = await http.get(`/houses/${houseId}`);
+        renderHouseDetail(houseData);
+    } catch (error) {
+        Toast.error(error.message || '加载房源详情失败');
+        console.error(error);
+    }
+}
+
+function renderHouseDetail(data) {
+    document.getElementById('house-title').textContent = data.title;
+    document.getElementById('house-price').innerHTML = `${data.price.toLocaleString()}<span class="text-sm font-normal text-secondary">/月</span>`;
+    
+    const tags = [];
+    if (data.is_new) tags.push('<span class="tag">新发布</span>');
+    if (data.is_featured) tags.push('<span class="tag">精选</span>');
+    if (data.is_vip) tags.push('<span class="tag">VIP</span>');
+    document.getElementById('house-tags').innerHTML = tags.join('');
+    
+    document.getElementById('house-area').textContent = `${data.area}㎡`;
+    document.getElementById('house-layout').textContent = `${data.bedrooms}室${data.livingrooms}厅${data.bathrooms || 0}卫`;
+    document.getElementById('house-orientation').textContent = getOrientationLabel(data.orientation);
+    document.getElementById('house-decoration').textContent = getDecorationLabel(data.decoration);
+    document.getElementById('house-location').textContent = `${data.city} ${data.district || ''} ${data.address || ''}`;
+    document.getElementById('house-publish-time').textContent = formatDate(data.created_at);
+    document.getElementById('house-description').textContent = data.description || '暂无描述';
+    
+    const facilities = data.facilities || [];
+    if (facilities.length > 0) {
+        document.getElementById('house-facilities').innerHTML = `
+            <div class="tags">
+                ${facilities.map(f => `<span class="tag">${f}</span>`).join('')}
+            </div>
+        `;
+    } else {
+        document.getElementById('house-facilities').innerHTML = '<p class="text-secondary">暂无配套设施信息</p>';
+    }
+    
+    if (data.landlord) {
+        document.getElementById('landlord-name').textContent = data.landlord.nickname || data.landlord.username;
+        document.getElementById('landlord-role').textContent = getRoleLabel(data.landlord.role);
+    }
+    
+    document.getElementById('stat-views').textContent = data.views || 0;
+    document.getElementById('stat-likes').textContent = data.like_count || 0;
+    document.getElementById('stat-favorites').textContent = data.favorite_count || 0;
+    document.getElementById('stat-comments').textContent = data.comment_count || 0;
+    
+    renderCarousel(data.images || []);
+    
+    const favoriteBtn = document.getElementById('favorite-btn');
+    if (data.is_favorited) {
+        favoriteBtn.innerHTML = '❤️ 已收藏';
+        favoriteBtn.classList.add('btn-primary');
+        favoriteBtn.classList.remove('btn-secondary');
+    }
+    
+    if (data.is_liked) {
+        const likeBtn = document.querySelector('.like-btn');
+        if (likeBtn) likeBtn.innerHTML = '❤️ 已点赞';
+    }
+}
+
+function renderCarousel(images) {
+    const container = document.getElementById('carousel-container');
+    
+    if (images.length === 0) {
+        container.innerHTML = `
+            <div class="carousel" style="height: 400px;">
+                <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=landscape_16_9" 
+                     class="w-full h-full object-cover rounded-lg"
+                     alt="房源图片">
+            </div>
+        `;
+        return;
+    }
+    
+    let currentIndex = 0;
+    
+    container.innerHTML = `
+        <div class="carousel">
+            <div class="carousel-container" id="carousel-inner">
+                ${images.map((img, i) => `
+                    <div class="carousel-item">
+                        <img src="${img.url}" alt="房源图片 ${i + 1}" 
+                             onerror="this.src='https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=landscape_16_9'">
+                    </div>
+                `).join('')}
+            </div>
+            <button class="carousel-nav carousel-prev" id="carousel-prev">&larr;</button>
+            <button class="carousel-nav carousel-next" id="carousel-next">&rarr;</button>
+            <div class="carousel-dots" id="carousel-dots">
+                ${images.map((_, i) => `
+                    <button class="carousel-dot ${i === 0 ? 'active' : ''}" data-index="${i}"></button>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    const inner = document.getElementById('carousel-inner');
+    const dots = document.querySelectorAll('.carousel-dot');
+    
+    function updateCarousel() {
+        inner.style.transform = `translateX(-${currentIndex * 100}%)`;
+        dots.forEach((dot, i) => {
+            dot.classList.toggle('active', i === currentIndex);
+        });
+    }
+    
+    document.getElementById('carousel-prev').addEventListener('click', () => {
+        currentIndex = (currentIndex - 1 + images.length) % images.length;
+        updateCarousel();
+    });
+    
+    document.getElementById('carousel-next').addEventListener('click', () => {
+        currentIndex = (currentIndex + 1) % images.length;
+        updateCarousel();
+    });
+    
+    dots.forEach(dot => {
+        dot.addEventListener('click', () => {
+            currentIndex = parseInt(dot.dataset.index);
+            updateCarousel();
+        });
+    });
+    
+    setInterval(() => {
+        currentIndex = (currentIndex + 1) % images.length;
+        updateCarousel();
+    }, 5000);
+}
+
+async function loadComments() {
+    try {
+        const data = await http.get(`/houses/${houseId}/comments`, { page: 1, page_size: 10 });
+        renderComments(data.items || []);
+    } catch (error) {
+        console.error('加载评论失败:', error);
+    }
+}
+
+function renderComments(comments) {
+    const container = document.getElementById('comments-container');
+    
+    if (comments.length === 0) {
+        container.innerHTML = '<p class="text-secondary text-center py-4">暂无评论</p>';
+        return;
+    }
+    
+    container.innerHTML = comments.map(comment => `
+        <div class="border-b pb-4 mb-4 last:border-0 last:mb-0 last:pb-0">
+            <div class="flex gap-3 mb-2">
+                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">👤</div>
+                <div class="flex-1">
+                    <div class="flex justify-between items-start">
+                        <p class="font-semibold text-sm">${comment.user?.nickname || '用户'}</p>
+                        <span class="text-secondary text-xs">${formatDate(comment.created_at)}</span>
+                    </div>
+                    <p class="mt-1">${comment.content}</p>
+                    <div class="flex gap-3 mt-2 text-sm">
+                        <button class="like-comment-btn text-secondary hover:text-primary" data-id="${comment.id}" data-liked="${comment.is_liked}">
+                            ${comment.is_liked ? '❤️' : '🤍'} ${comment.like_count || 0}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ${comment.replies && comment.replies.length > 0 ? `
+                <div class="ml-11 mt-2">
+                    ${comment.replies.map(reply => `
+                        <div class="bg-gray-50 p-2 rounded mb-2 last:mb-0">
+                            <p class="text-sm">
+                                <span class="font-semibold">${reply.user?.nickname || '用户'}</span>:
+                                ${reply.content}
+                            </p>
+                            <span class="text-secondary text-xs">${formatDate(reply.created_at)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+    
+    container.querySelectorAll('.like-comment-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const commentId = btn.dataset.id;
+            await toggleCommentLike(commentId, btn);
+        });
+    });
+}
+
+async function loadQuestions() {
+    try {
+        const data = await http.get(`/houses/${houseId}/questions`, { page: 1, page_size: 10 });
+        renderQuestions(data.items || []);
+    } catch (error) {
+        console.error('加载问题失败:', error);
+    }
+}
+
+function renderQuestions(questions) {
+    const container = document.getElementById('questions-container');
+    
+    if (questions.length === 0) {
+        container.innerHTML = '<p class="text-secondary text-center py-4">暂无提问</p>';
+        return;
+    }
+    
+    container.innerHTML = questions.map(q => `
+        <div class="border-b pb-4 mb-4 last:border-0 last:mb-0 last:pb-0">
+            <div class="flex gap-3">
+                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">Q</div>
+                <div class="flex-1">
+                    <div class="flex justify-between items-start">
+                        <p class="font-semibold text-sm">${q.title}</p>
+                        <span class="text-secondary text-xs">${formatDate(q.created_at)}</span>
+                    </div>
+                    <p class="text-secondary text-sm mt-1">${q.content || ''}</p>
+                    <p class="text-xs text-secondary mt-1">提问者: ${q.user?.nickname || '用户'}</p>
+                    
+                    ${q.answers && q.answers.length > 0 ? `
+                        <div class="mt-2">
+                            ${q.answers.map(a => `
+                                <div class="bg-green-50 p-2 rounded mb-2 last:mb-0">
+                                    <p class="text-sm">
+                                        <span class="font-semibold text-green-600">
+                                            ${a.user?.nickname || '用户'} 
+                                            ${a.user?.role === 'landlord' ? '(房东)' : a.user?.role === 'agent' ? '(业务员)' : ''}
+                                        </span>:
+                                        ${a.content}
+                                    </p>
+                                    <span class="text-secondary text-xs">${formatDate(a.created_at)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    <div class="flex gap-3 mt-2 text-sm">
+                        <button class="like-question-btn text-secondary hover:text-primary" data-id="${q.id}" data-liked="${q.is_liked}">
+                            ${q.is_liked ? '❤️' : '🤍'} ${q.like_count || 0}
+                        </button>
+                        <button class="answer-btn text-secondary hover:text-primary" data-id="${q.id}">
+                            💬 回答
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function bindEvents() {
+    const favoriteBtn = document.getElementById('favorite-btn');
+    const shareBtn = document.getElementById('share-btn');
+    const contactBtn = document.getElementById('contact-btn');
+    const addCommentBtn = document.getElementById('add-comment-btn');
+    const addQuestionBtn = document.getElementById('add-question-btn');
+    
+    if (favoriteBtn) {
+        favoriteBtn.addEventListener('click', async () => {
+            await toggleHouseFavorite();
+        });
+    }
+    
+    if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                Toast.success('链接已复制到剪贴板');
+            }).catch(() => {
+                Toast.info(`分享链接: ${window.location.href}`);
+            });
+        });
+    }
+    
+    if (contactBtn) {
+        contactBtn.addEventListener('click', () => {
+            if (!AppState.token) {
+                Toast.warning('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+            Toast.info('消息功能开发中...');
+        });
+    }
+    
+    if (addCommentBtn) {
+        addCommentBtn.addEventListener('click', () => {
+            if (!AppState.token) {
+                Toast.warning('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+            document.getElementById('comment-modal').style.display = 'flex';
+        });
+    }
+    
+    if (addQuestionBtn) {
+        addQuestionBtn.addEventListener('click', () => {
+            if (!AppState.token) {
+                Toast.warning('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+            document.getElementById('question-modal').style.display = 'flex';
+        });
+    }
+    
+    document.getElementById('close-comment-modal').addEventListener('click', () => {
+        document.getElementById('comment-modal').style.display = 'none';
+    });
+    document.getElementById('cancel-comment').addEventListener('click', () => {
+        document.getElementById('comment-modal').style.display = 'none';
+    });
+    
+    document.getElementById('close-question-modal').addEventListener('click', () => {
+        document.getElementById('question-modal').style.display = 'none';
+    });
+    document.getElementById('cancel-question').addEventListener('click', () => {
+        document.getElementById('question-modal').style.display = 'none';
+    });
+    
+    const commentForm = document.getElementById('comment-form');
+    if (commentForm) {
+        commentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await submitComment();
+        });
+    }
+    
+    const questionForm = document.getElementById('question-form');
+    if (questionForm) {
+        questionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await submitQuestion();
+        });
+    }
+}
+
+async function toggleHouseFavorite() {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    const btn = document.getElementById('favorite-btn');
+    const isFavorited = btn.innerHTML.includes('已收藏');
+    
+    try {
+        if (isFavorited) {
+            await http.delete(`/houses/${houseId}/favorite`);
+            btn.innerHTML = '🤍 收藏';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-secondary');
+            Toast.success('已取消收藏');
+        } else {
+            await http.post(`/houses/${houseId}/favorite`);
+            btn.innerHTML = '❤️ 已收藏';
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-secondary');
+            Toast.success('已添加收藏');
+        }
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
+}
+
+async function toggleCommentLike(commentId, btn) {
+    if (!AppState.token) {
+        Toast.warning('请先登录');
+        window.location.href = '/login';
+        return;
+    }
+    
+    const isLiked = btn.dataset.liked === 'true';
+    
+    try {
+        if (isLiked) {
+            await http.delete(`/comments/${commentId}/like`);
+        } else {
+            await http.post(`/comments/${commentId}/like`);
+        }
+        
+        btn.dataset.liked = (!isLiked).toString();
+        const count = parseInt(btn.textContent.trim().split(' ')[1] || '0');
+        btn.innerHTML = `${!isLiked ? '❤️' : '🤍'} ${isLiked ? count - 1 : count + 1}`;
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
+}
+
+async function submitComment() {
+    const content = document.getElementById('comment-content').value.trim();
+    
+    if (!content) {
+        Toast.warning('请输入评论内容');
+        return;
+    }
+    
+    try {
+        await http.post(`/houses/${houseId}/comments`, { content });
+        Toast.success('评论发表成功');
+        document.getElementById('comment-modal').style.display = 'none';
+        document.getElementById('comment-content').value = '';
+        await loadComments();
+    } catch (error) {
+        Toast.error(error.message || '发表评论失败');
+    }
+}
+
+async function submitQuestion() {
+    const title = document.getElementById('question-title').value.trim();
+    const content = document.getElementById('question-content').value.trim();
+    
+    if (!title) {
+        Toast.warning('请输入问题标题');
+        return;
+    }
+    
+    try {
+        await http.post(`/houses/${houseId}/questions`, { title, content });
+        Toast.success('提问成功');
+        document.getElementById('question-modal').style.display = 'none';
+        document.getElementById('question-title').value = '';
+        document.getElementById('question-content').value = '';
+        await loadQuestions();
+    } catch (error) {
+        Toast.error(error.message || '提问失败');
+    }
+}
+
+function getOrientationLabel(orientation) {
+    const labels = {
+        'south': '朝南',
+        'north': '朝北',
+        'east': '朝东',
+        'west': '朝西',
+        'southeast': '东南',
+        'southwest': '西南',
+        'northeast': '东北',
+        'northwest': '西北'
+    };
+    return labels[orientation] || orientation;
+}
+
+function getDecorationLabel(decoration) {
+    const labels = {
+        'rough': '毛坯',
+        'simple': '简装',
+        'standard': '中装',
+        'fine': '精装',
+        'luxury': '豪装'
+    };
+    return labels[decoration] || decoration;
+}
+
+function getRoleLabel(role) {
+    const labels = {
+        'user': '普通用户',
+        'landlord': '房东',
+        'agent': '业务员',
+        'admin': '管理员'
+    };
+    return labels[role] || role;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('zh-CN');
+}
+</script>
+{% endblock %}
