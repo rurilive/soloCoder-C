@@ -11,6 +11,7 @@ from app.config.database import get_async_session
 from app.models import (
     User, House, HouseImage, HouseStatus, HouseType,
     Favorite, Like, TargetType, FAQ,
+    Orientation, Decoration,
 )
 from app.schemas.house import (
     HouseCreate, HouseUpdate, HouseResponse,
@@ -28,8 +29,6 @@ router = APIRouter(prefix="/api/houses", tags=["房源"])
 
 def parse_orientation(orientation_str: Optional[str]) -> Optional[Orientation]:
     """解析朝向字符串为枚举"""
-    from app.models import Orientation
-    
     if not orientation_str:
         return None
     
@@ -56,8 +55,6 @@ def parse_orientation(orientation_str: Optional[str]) -> Optional[Orientation]:
 
 def parse_decoration(decoration_str: Optional[str]) -> Optional[Decoration]:
     """解析装修字符串为枚举"""
-    from app.models import Decoration
-    
     if not decoration_str:
         return None
     
