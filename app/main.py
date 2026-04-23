@@ -238,6 +238,12 @@ async def admin_page(request: Request):
     return templates.TemplateResponse(request, "admin/index.html")
 
 
+@app.get("/faq")
+async def faq_page(request: Request):
+    """常见问题页面"""
+    return templates.TemplateResponse(request, "faq/index.html")
+
+
 # 健康检查
 @app.get("/health")
 async def health_check():

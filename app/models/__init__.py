@@ -416,10 +416,25 @@ class Report(Base):
     reporter: Mapped["User"] = relationship("User", foreign_keys=[reporter_id], back_populates="reports")
 
 
+class FAQ(Base):
+    """常见问题模型"""
+
+    __tablename__ = "faqs"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    question: Mapped[str] = mapped_column(String(500), nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 __all__ = [
     "User", "House", "HouseImage", "Comment", "Question", "Answer",
     "Favorite", "FavoriteFolder", "Like", "Message", "Notification",
-    "ViewingAppointment", "Report",
+    "ViewingAppointment", "Report", "FAQ",
     "UserRole", "UserStatus", "HouseStatus", "HouseType", "Orientation",
     "Decoration", "ImageType", "CommentStatus", "QuestionStatus",
     "MessageType", "AppointmentStatus", "ReportStatus", "TargetType",

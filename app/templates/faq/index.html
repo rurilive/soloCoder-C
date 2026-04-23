@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}常见问题 - 租房管理系统{% endblock %}
+
+{% block content %}
+<section class="py-8">
+    <div class="container">
+        <div style="max-width: 800px; margin: 0 auto;">
+            <div class="text-center mb-8">
+                <h1 class="text-2xl font-bold mb-2">常见问题</h1>
+                <p class="text-secondary">我们整理了用户最常问的问题，希望能帮到您</p>
+            </div>
+            
+            <div id="faq-container">
+                <div class="text-center py-8">
+                    <p class="text-secondary">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadFAQs();
+});
+
+async function loadFAQs() {
+    const container = document.getElementById('faq-container');
+    
+    try {
+        const data = await http.get('/api/houses/faqs');
+        
+        if (data.data && data.data.length > 0) {
+            container.innerHTML = data.data.map((faq, index) => `
+                <div class="card mb-4 faq-item">
+                    <div class="card-header cursor-pointer" onclick="toggleFAQ(${index})">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-medium">
+                                <span class="text-primary mr-2">Q${index + 1}:</span>
+                                ${faq.question}
+                            </h3>
+                            <span class="text-secondary" id="faq-icon-${index}">▼</span>
+                        </div>
+                    </div>
+                    <div class="card-body" id="faq-answer-${index}" style="display: none;">
+                        <p class="text-secondary">
+                            <span class="text-primary mr-2">A:</span>
+                            ${faq.answer}
+                        </p>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = `
+                <div class="text-center py-8">
+                    <p class="text-secondary">暂无常见问题</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载常见问题失败:', error);
+        container.innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-secondary">加载失败，请稍后重试</p>
+            </div>
+        `;
+    }
+}
+
+function toggleFAQ(index) {
+    const answerEl = document.getElementById(`faq-answer-${index}`);
+    const iconEl = document.getElementById(`faq-icon-${index}`);
+    
+    if (answerEl.style.display === 'none') {
+        answerEl.style.display = 'block';
+        iconEl.textContent = '▲';
+    } else {
+        answerEl.style.display = 'none';
+        iconEl.textContent = '▼';
+    }
+}
+</script>
+{% endblock %}

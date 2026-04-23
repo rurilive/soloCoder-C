@@ -11,7 +11,7 @@ from app.config.database import get_async_session
 from app.models import (
     User, House, HouseStatus, UserRole, UserStatus,
     Comment, CommentStatus, Question, QuestionStatus,
-    Report, ReportStatus,
+    Report, ReportStatus, FAQ,
 )
 from app.schemas.common import PaginatedParams
 from app.routers.auth import get_current_admin
@@ -532,3 +532,159 @@ async def get_statistics(
             },
         }
     )
+
+
+@router.get("/faqs")
+async def get_faqs_admin(
+    is_active: Optional[bool] = None,
+    keyword: Optional[str] = None,
+    pagination: PaginatedParams = Depends(),
+    current_user: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """获取常见问题列表（管理后台）"""
+    query = select(FAQ)
+    count_query = select(func.count(FAQ.id))
+
+    if is_active is not None:
+        query = query.where(FAQ.is_active == is_active)
+        count_query = count_query.where(FAQ.is_active == is_active)
+
+    if keyword:
+        keyword_pattern = f"%{keyword}%"
+        query = query.where(
+            FAQ.question.ilike(keyword_pattern)
+            | FAQ.answer.ilike(keyword_pattern)
+        )
+        count_query = count_query.where(
+            FAQ.question.ilike(keyword_pattern)
+            | FAQ.answer.ilike(keyword_pattern)
+        )
+
+    count_result = await session.execute(count_query)
+    total = count_result.scalar() or 0
+
+    query = query.order_by(FAQ.sort_order.asc(), FAQ.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
+    result = await session.execute(query)
+    faqs = result.scalars().all()
+
+    faq_list = []
+    for faq in faqs:
+        faq_list.append(
+            {
+                "id": str(faq.id),
+                "question": faq.question,
+                "answer": faq.answer,
+                "sort_order": faq.sort_order,
+                "is_active": faq.is_active,
+                "view_count": faq.view_count,
+                "created_at": faq.created_at.isoformat(),
+                "updated_at": faq.updated_at.isoformat(),
+            }
+        )
+
+    return paginated_response(
+        data=faq_list,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+
+
+@router.post("/faqs")
+async def create_faq(
+    question: str = Form(...),
+    answer: str = Form(...),
+    sort_order: int = Form(default=0),
+    is_active: bool = Form(default=True),
+    current_user: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """创建常见问题"""
+    new_faq = FAQ(
+        question=question,
+        answer=answer,
+        sort_order=sort_order,
+        is_active=is_active,
+    )
+
+    session.add(new_faq)
+    await session.commit()
+    await session.refresh(new_faq)
+
+    return success_response(
+        data={
+            "id": str(new_faq.id),
+            "question": new_faq.question,
+            "answer": new_faq.answer,
+            "sort_order": new_faq.sort_order,
+            "is_active": new_faq.is_active,
+        },
+        message="常见问题创建成功",
+    )
+
+
+@router.put("/faqs/{faq_id}")
+async def update_faq(
+    faq_id: UUID,
+    question: Optional[str] = Form(default=None),
+    answer: Optional[str] = Form(default=None),
+    sort_order: Optional[int] = Form(default=None),
+    is_active: Optional[bool] = Form(default=None),
+    current_user: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """更新常见问题"""
+    result = await session.execute(select(FAQ).where(FAQ.id == faq_id))
+    faq = result.scalar_one_or_none()
+
+    if not faq:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="常见问题不存在",
+        )
+
+    if question is not None:
+        faq.question = question
+    if answer is not None:
+        faq.answer = answer
+    if sort_order is not None:
+        faq.sort_order = sort_order
+    if is_active is not None:
+        faq.is_active = is_active
+
+    await session.commit()
+    await session.refresh(faq)
+
+    return success_response(
+        data={
+            "id": str(faq.id),
+            "question": faq.question,
+            "answer": faq.answer,
+            "sort_order": faq.sort_order,
+            "is_active": faq.is_active,
+        },
+        message="常见问题更新成功",
+    )
+
+
+@router.delete("/faqs/{faq_id}")
+async def delete_faq(
+    faq_id: UUID,
+    current_user: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """删除常见问题"""
+    result = await session.execute(select(FAQ).where(FAQ.id == faq_id))
+    faq = result.scalar_one_or_none()
+
+    if not faq:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="常见问题不存在",
+        )
+
+    await session.delete(faq)
+    await session.commit()
+
+    return success_response(message="常见问题删除成功")

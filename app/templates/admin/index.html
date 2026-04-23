@@ -44,6 +44,9 @@
                 <div class="sidebar-item" data-tab="reports">
                     ⚠️ 举报管理
                 </div>
+                <div class="sidebar-item" data-tab="faqs">
+                    ❓ 常见问题
+                </div>
             </div>
             
             <div class="grid-cols-2">
@@ -187,6 +190,65 @@
                         </div>
                     </div>
                 </div>
+                
+                <div id="tab-faqs" class="tab-content" style="display: none;">
+                    <div class="card mb-4">
+                        <div class="card-header flex justify-between items-center">
+                            <h2 class="text-lg font-bold">添加常见问题</h2>
+                            <button type="button" class="btn btn-primary" id="add-faq-btn">
+                                ➕ 添加新问题
+                            </button>
+                        </div>
+                        <div class="card-body" id="faq-form-container" style="display: none;">
+                            <form id="faq-form">
+                                <input type="hidden" id="faq-id" value="">
+                                <div class="form-group">
+                                    <label class="form-label">问题 *</label>
+                                    <input type="text" class="form-control" id="faq-question" name="question" placeholder="请输入问题" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">答案 *</label>
+                                    <textarea class="form-control" id="faq-answer" name="answer" rows="4" placeholder="请输入答案" required></textarea>
+                                </div>
+                                <div class="grid grid-2 gap-4">
+                                    <div class="form-group">
+                                        <label class="form-label">排序</label>
+                                        <input type="number" class="form-control" id="faq-sort-order" name="sort_order" value="0" min="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">状态</label>
+                                        <select class="form-control" id="faq-is-active" name="is_active">
+                                            <option value="true">启用</option>
+                                            <option value="false">禁用</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button type="submit" class="btn btn-primary">保存</button>
+                                    <button type="button" class="btn btn-secondary" id="cancel-faq-btn">取消</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header flex justify-between items-center">
+                            <h2 class="text-lg font-bold">常见问题列表</h2>
+                            <div class="flex gap-2">
+                                <select class="form-control" id="filter-faq-status" style="width: 120px;">
+                                    <option value="">全部状态</option>
+                                    <option value="true">启用</option>
+                                    <option value="false">禁用</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="faqs-list">
+                            </div>
+                            <div id="faqs-pagination"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -197,6 +259,7 @@
 <script>
 let usersPagination = null;
 let housesPagination = null;
+let faqsPagination = null;
 let currentTab = 'users';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -232,6 +295,13 @@ function initPagination() {
         total: 0,
         onPageChange: (page) => loadHouses(page)
     });
+    
+    faqsPagination = new Pagination('#faqs-pagination', {
+        currentPage: 1,
+        pageSize: 10,
+        total: 0,
+        onPageChange: (page) => loadFAQs(page)
+    });
 }
 
 function bindTabEvents() {
@@ -255,6 +325,7 @@ function bindTabEvents() {
             if (tab === 'houses') loadHouses();
             if (tab === 'comments') loadComments();
             if (tab === 'reports') loadReports();
+            if (tab === 'faqs') loadFAQs();
         });
     });
 }
@@ -543,6 +614,183 @@ function formatDate(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
     return date.toLocaleDateString('zh-CN');
+}
+
+
+async function loadFAQs(page = 1) {
+    const container = document.getElementById('faqs-list');
+    
+    try {
+        const params = { page, page_size: 10 };
+        const status = document.getElementById('filter-faq-status')?.value;
+        
+        if (status !== '') params.is_active = status === 'true';
+        
+        const data = await http.get('/api/admin/faqs', params);
+        
+        if (faqsPagination) {
+            faqsPagination.update({
+                currentPage: data.page || page,
+                total: data.total || 0
+            });
+        }
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map(faq => `
+                <div class="card mb-4">
+                    <div class="card-header flex justify-between items-center">
+                        <div>
+                            <span class="badge badge-${faq.is_active ? 'success' : 'danger'} mr-2">
+                                ${faq.is_active ? '启用' : '禁用'}
+                            </span>
+                            <span class="font-medium">${faq.question}</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="editFAQ('${faq.id}')">编辑</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteFAQ('${faq.id}')">删除</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-secondary">${faq.answer}</p>
+                        <div class="flex gap-4 mt-3 text-sm text-secondary">
+                            <span>排序: ${faq.sort_order}</span>
+                            <span>浏览: ${faq.view_count || 0}</span>
+                            <span>创建时间: ${formatDate(faq.created_at)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = `
+                <div class="text-center py-8 text-secondary">
+                    暂无常见问题数据
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('加载常见问题列表失败:', error);
+        container.innerHTML = `
+            <div class="text-center py-8 text-secondary">
+                加载失败
+            </div>
+        `;
+    }
+}
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    const addFaqBtn = document.getElementById('add-faq-btn');
+    const cancelFaqBtn = document.getElementById('cancel-faq-btn');
+    const faqForm = document.getElementById('faq-form');
+    const faqFormContainer = document.getElementById('faq-form-container');
+    const filterFaqStatus = document.getElementById('filter-faq-status');
+    
+    if (addFaqBtn) {
+        addFaqBtn.addEventListener('click', () => {
+            resetFaqForm();
+            faqFormContainer.style.display = 'block';
+        });
+    }
+    
+    if (cancelFaqBtn) {
+        cancelFaqBtn.addEventListener('click', () => {
+            faqFormContainer.style.display = 'none';
+            resetFaqForm();
+        });
+    }
+    
+    if (faqForm) {
+        faqForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveFAQ();
+        });
+    }
+    
+    if (filterFaqStatus) {
+        filterFaqStatus.addEventListener('change', () => {
+            if (currentTab === 'faqs') {
+                loadFAQs();
+            }
+        });
+    }
+});
+
+
+function resetFaqForm() {
+    const faqForm = document.getElementById('faq-form');
+    if (faqForm) {
+        faqForm.reset();
+        document.getElementById('faq-id').value = '';
+        document.getElementById('faq-sort-order').value = '0';
+        document.getElementById('faq-is-active').value = 'true';
+    }
+}
+
+
+async function saveFAQ() {
+    const faqId = document.getElementById('faq-id').value;
+    const question = document.getElementById('faq-question').value;
+    const answer = document.getElementById('faq-answer').value;
+    const sortOrder = parseInt(document.getElementById('faq-sort-order').value || '0');
+    const isActive = document.getElementById('faq-is-active').value === 'true';
+    
+    const formData = new FormData();
+    formData.append('question', question);
+    formData.append('answer', answer);
+    formData.append('sort_order', sortOrder);
+    formData.append('is_active', isActive);
+    
+    try {
+        if (faqId) {
+            await http.put(`/api/admin/faqs/${faqId}`, formData, true);
+            Toast.success('常见问题更新成功');
+        } else {
+            await http.post('/api/admin/faqs', formData, true);
+            Toast.success('常见问题创建成功');
+        }
+        
+        document.getElementById('faq-form-container').style.display = 'none';
+        resetFaqForm();
+        loadFAQs();
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
+}
+
+
+async function editFAQ(faqId) {
+    try {
+        const data = await http.get('/api/admin/faqs', { page: 1, page_size: 100 });
+        
+        if (data.items) {
+            const faq = data.items.find(item => item.id === faqId);
+            if (faq) {
+                document.getElementById('faq-id').value = faq.id;
+                document.getElementById('faq-question').value = faq.question;
+                document.getElementById('faq-answer').value = faq.answer;
+                document.getElementById('faq-sort-order').value = faq.sort_order;
+                document.getElementById('faq-is-active').value = faq.is_active ? 'true' : 'false';
+                document.getElementById('faq-form-container').style.display = 'block';
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+    } catch (error) {
+        Toast.error(error.message || '加载失败');
+    }
+}
+
+
+async function deleteFAQ(faqId) {
+    if (!confirm('确定要删除这个常见问题吗？')) return;
+    
+    try {
+        await http.delete(`/api/admin/faqs/${faqId}`);
+        Toast.success('常见问题删除成功');
+        loadFAQs();
+    } catch (error) {
+        Toast.error(error.message || '操作失败');
+    }
 }
 </script>
 {% endblock %}

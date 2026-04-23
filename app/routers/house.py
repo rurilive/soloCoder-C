@@ -10,7 +10,7 @@ import json
 from app.config.database import get_async_session
 from app.models import (
     User, House, HouseImage, HouseStatus, HouseType,
-    Favorite, Like, TargetType,
+    Favorite, Like, TargetType, FAQ,
 )
 from app.schemas.house import (
     HouseCreate, HouseUpdate, HouseResponse,
@@ -538,4 +538,35 @@ async def get_my_houses(
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
+    )
+
+
+@router.get("/faqs")
+async def get_faqs_public(
+    session: AsyncSession = Depends(get_async_session),
+):
+    """获取常见问题列表（公共接口，无需登录）"""
+    from sqlalchemy import select, func
+
+    query = select(FAQ).where(FAQ.is_active == True).order_by(FAQ.sort_order.asc(), FAQ.created_at.desc())
+    result = await session.execute(query)
+    faqs = result.scalars().all()
+
+    faq_list = []
+    for faq in faqs:
+        faq.view_count += 1
+        faq_list.append(
+            {
+                "id": str(faq.id),
+                "question": faq.question,
+                "answer": faq.answer,
+                "view_count": faq.view_count,
+            }
+        )
+
+    await session.commit()
+
+    return success_response(
+        data=faq_list,
+        message="获取成功",
     )
