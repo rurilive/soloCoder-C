@@ -819,6 +819,29 @@ a:hover {
     }
 }
 
+/* 高级搜索样式 */
+.search-advanced {
+    display: grid;
+}
+
+.search-advanced.show {
+    display: grid !important;
+}
+
+@media (max-width: 768px) {
+    .search-basic.grid-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .search-advanced {
+        display: none;
+    }
+    
+    .search-advanced.grid-4 {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 480px) {
     .image-preview-grid {
         grid-template-columns: repeat(2, 1fr);

@@ -7,91 +7,99 @@
     <div class="container">
         <div class="card mb-6">
             <div class="card-body">
-                <form id="filter-form" class="grid grid-4 gap-4">
-                    <div class="form-group mb-0">
-                        <label class="form-label">关键词</label>
-                        <input type="text" class="form-control" id="keyword" name="keyword" placeholder="搜索小区、地铁、商圈...">
+                <form id="filter-form">
+                    <div class="search-basic grid grid-4 gap-4">
+                        <div class="form-group mb-0">
+                            <label class="form-label">关键词</label>
+                            <input type="text" class="form-control" id="keyword" name="keyword" placeholder="搜索小区、地铁、商圈...">
+                        </div>
+                        
+                        <div class="form-group mb-0">
+                            <label class="form-label">城市</label>
+                            <select class="form-control" id="city" name="city">
+                                <option value="">全部城市</option>
+                                <option value="北京">北京</option>
+                                <option value="上海">上海</option>
+                                <option value="广州">广州</option>
+                                <option value="深圳">深圳</option>
+                                <option value="杭州">杭州</option>
+                                <option value="南京">南京</option>
+                                <option value="成都">成都</option>
+                                <option value="武汉">武汉</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-0">
+                            <label class="form-label">价格范围</label>
+                            <select class="form-control" id="price_range" name="price_range">
+                                <option value="">不限</option>
+                                <option value="0-2000">2000元以下</option>
+                                <option value="2000-4000">2000-4000元</option>
+                                <option value="4000-6000">4000-6000元</option>
+                                <option value="6000-8000">6000-8000元</option>
+                                <option value="8000-10000">8000-10000元</option>
+                                <option value="10000-999999">10000元以上</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-0 flex items-end gap-2">
+                            <button type="submit" class="btn btn-primary">搜索</button>
+                            <button type="button" class="btn btn-secondary" id="advanced-search-btn">高级搜索</button>
+                        </div>
                     </div>
                     
-                    <div class="form-group mb-0">
-                        <label class="form-label">城市</label>
-                        <select class="form-control" id="city" name="city">
-                            <option value="">全部城市</option>
-                            <option value="北京">北京</option>
-                            <option value="上海">上海</option>
-                            <option value="广州">广州</option>
-                            <option value="深圳">深圳</option>
-                            <option value="杭州">杭州</option>
-                            <option value="南京">南京</option>
-                            <option value="成都">成都</option>
-                            <option value="武汉">武汉</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group mb-0">
-                        <label class="form-label">价格范围</label>
-                        <select class="form-control" id="price_range" name="price_range">
-                            <option value="">不限</option>
-                            <option value="0-2000">2000元以下</option>
-                            <option value="2000-4000">2000-4000元</option>
-                            <option value="4000-6000">4000-6000元</option>
-                            <option value="6000-8000">6000-8000元</option>
-                            <option value="8000-10000">8000-10000元</option>
-                            <option value="10000-999999">10000元以上</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group mb-0">
-                        <label class="form-label">户型</label>
-                        <select class="form-control" id="bedrooms" name="bedrooms">
-                            <option value="">不限</option>
-                            <option value="1">一居</option>
-                            <option value="2">二居</option>
-                            <option value="3">三居</option>
-                            <option value="4">四居及以上</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group mb-0">
-                        <label class="form-label">房屋类型</label>
-                        <select class="form-control" id="house_type" name="house_type">
-                            <option value="">不限</option>
-                            <option value="apartment">公寓</option>
-                            <option value="house">住宅</option>
-                            <option value="villa">别墅</option>
-                            <option value="shop">商铺</option>
-                            <option value="office">写字楼</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group mb-0">
-                        <label class="form-label">装修情况</label>
-                        <select class="form-control" id="decoration" name="decoration">
-                            <option value="">不限</option>
-                            <option value="rough">毛坯</option>
-                            <option value="simple">简装</option>
-                            <option value="standard">中装</option>
-                            <option value="fine">精装</option>
-                            <option value="luxury">豪装</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group mb-0">
-                        <label class="form-label">排序方式</label>
-                        <select class="form-control" id="sort" name="sort">
-                            <option value="">默认排序</option>
-                            <option value="price_asc">价格从低到高</option>
-                            <option value="price_desc">价格从高到低</option>
-                            <option value="area_asc">面积从小到大</option>
-                            <option value="area_desc">面积从大到小</option>
-                            <option value="views">浏览量最高</option>
-                            <option value="newest">最新发布</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group mb-0 flex items-end gap-2">
-                        <button type="submit" class="btn btn-primary">搜索</button>
-                        <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
+                    <div class="search-advanced grid grid-4 gap-4 mt-4" id="search-advanced">
+                        <div class="form-group mb-0">
+                            <label class="form-label">户型</label>
+                            <select class="form-control" id="bedrooms" name="bedrooms">
+                                <option value="">不限</option>
+                                <option value="1">一居</option>
+                                <option value="2">二居</option>
+                                <option value="3">三居</option>
+                                <option value="4">四居及以上</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-0">
+                            <label class="form-label">房屋类型</label>
+                            <select class="form-control" id="house_type" name="house_type">
+                                <option value="">不限</option>
+                                <option value="apartment">公寓</option>
+                                <option value="house">住宅</option>
+                                <option value="villa">别墅</option>
+                                <option value="shop">商铺</option>
+                                <option value="office">写字楼</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-0">
+                            <label class="form-label">装修情况</label>
+                            <select class="form-control" id="decoration" name="decoration">
+                                <option value="">不限</option>
+                                <option value="rough">毛坯</option>
+                                <option value="simple">简装</option>
+                                <option value="standard">中装</option>
+                                <option value="fine">精装</option>
+                                <option value="luxury">豪装</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-0">
+                            <label class="form-label">排序方式</label>
+                            <select class="form-control" id="sort" name="sort">
+                                <option value="">默认排序</option>
+                                <option value="price_asc">价格从低到高</option>
+                                <option value="price_desc">价格从高到低</option>
+                                <option value="area_asc">面积从小到大</option>
+                                <option value="area_desc">面积从大到小</option>
+                                <option value="views">浏览量最高</option>
+                                <option value="newest">最新发布</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-0 flex items-end gap-2">
+                            <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -121,6 +129,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const filterForm = document.getElementById('filter-form');
     const resetBtn = document.getElementById('reset-btn');
+    const advancedSearchBtn = document.getElementById('advanced-search-btn');
+    const searchAdvanced = document.getElementById('search-advanced');
     
     if (filterForm) {
         filterForm.addEventListener('submit', (e) => {
@@ -135,6 +145,18 @@ document.addEventListener('DOMContentLoaded', () => {
             filterForm.reset();
             currentPage = 1;
             loadHouses();
+        });
+    }
+    
+    if (advancedSearchBtn && searchAdvanced) {
+        advancedSearchBtn.addEventListener('click', () => {
+            if (searchAdvanced.classList.contains('show')) {
+                searchAdvanced.classList.remove('show');
+                advancedSearchBtn.textContent = '高级搜索';
+            } else {
+                searchAdvanced.classList.add('show');
+                advancedSearchBtn.textContent = '收起高级搜索';
+            }
         });
     }
 });
