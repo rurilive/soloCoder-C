@@ -231,10 +231,10 @@ function renderHouseDetail(data) {
     
     document.getElementById('house-area').textContent = `${data.area}㎡`;
     document.getElementById('house-layout').textContent = `${data.bedrooms}室${data.livingrooms}厅${data.bathrooms || 0}卫`;
-    document.getElementById('house-orientation').textContent = getOrientationLabel(data.orientation);
-    document.getElementById('house-decoration').textContent = getDecorationLabel(data.decoration);
+    document.getElementById('house-orientation').textContent = HouseUtils.getOrientationLabel(data.orientation);
+    document.getElementById('house-decoration').textContent = HouseUtils.getDecorationLabel(data.decoration);
     document.getElementById('house-location').textContent = `${data.city} ${data.district || ''} ${data.address || ''}`;
-    document.getElementById('house-publish-time').textContent = formatDate(data.created_at);
+    document.getElementById('house-publish-time').textContent = HouseUtils.formatDate(data.created_at);
     document.getElementById('house-description').textContent = data.description || '暂无描述';
     
     const facilities = data.facilities || [];
@@ -250,7 +250,7 @@ function renderHouseDetail(data) {
     
     if (data.landlord) {
         document.getElementById('landlord-name').textContent = data.landlord.nickname || data.landlord.username;
-        document.getElementById('landlord-role').textContent = getRoleLabel(data.landlord.role);
+        document.getElementById('landlord-role').textContent = HouseUtils.getRoleLabel(data.landlord.role);
     }
     
     document.getElementById('stat-views').textContent = data.views || 0;
@@ -366,7 +366,7 @@ function renderComments(comments) {
                 <div class="flex-1">
                     <div class="flex justify-between items-start">
                         <p class="font-semibold text-sm">${comment.user?.nickname || '用户'}</p>
-                        <span class="text-secondary text-xs">${formatDate(comment.created_at)}</span>
+                        <span class="text-secondary text-xs">${HouseUtils.formatDate(comment.created_at)}</span>
                     </div>
                     <p class="mt-1">${comment.content}</p>
                     <div class="flex gap-3 mt-2 text-sm">
@@ -384,7 +384,7 @@ function renderComments(comments) {
                                 <span class="font-semibold">${reply.user?.nickname || '用户'}</span>:
                                 ${reply.content}
                             </p>
-                            <span class="text-secondary text-xs">${formatDate(reply.created_at)}</span>
+                            <span class="text-secondary text-xs">${HouseUtils.formatDate(reply.created_at)}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -424,7 +424,7 @@ function renderQuestions(questions) {
                 <div class="flex-1">
                     <div class="flex justify-between items-start">
                         <p class="font-semibold text-sm">${q.title}</p>
-                        <span class="text-secondary text-xs">${formatDate(q.created_at)}</span>
+                        <span class="text-secondary text-xs">${HouseUtils.formatDate(q.created_at)}</span>
                     </div>
                     <p class="text-secondary text-sm mt-1">${q.content || ''}</p>
                     <p class="text-xs text-secondary mt-1">提问者: ${q.user?.nickname || '用户'}</p>
@@ -440,7 +440,7 @@ function renderQuestions(questions) {
                                         </span>:
                                         ${a.content}
                                     </p>
-                                    <span class="text-secondary text-xs">${formatDate(a.created_at)}</span>
+                                    <span class="text-secondary text-xs">${HouseUtils.formatDate(a.created_at)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -640,45 +640,6 @@ async function submitQuestion() {
     }
 }
 
-function getOrientationLabel(orientation) {
-    const labels = {
-        'south': '朝南',
-        'north': '朝北',
-        'east': '朝东',
-        'west': '朝西',
-        'southeast': '东南',
-        'southwest': '西南',
-        'northeast': '东北',
-        'northwest': '西北'
-    };
-    return labels[orientation] || orientation;
-}
 
-function getDecorationLabel(decoration) {
-    const labels = {
-        'rough': '毛坯',
-        'simple': '简装',
-        'standard': '中装',
-        'fine': '精装',
-        'luxury': '豪装'
-    };
-    return labels[decoration] || decoration;
-}
-
-function getRoleLabel(role) {
-    const labels = {
-        'user': '普通用户',
-        'landlord': '房东',
-        'agent': '业务员',
-        'admin': '管理员'
-    };
-    return labels[role] || role;
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('zh-CN');
-}
 </script>
 {% endblock %}

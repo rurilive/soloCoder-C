@@ -501,9 +501,38 @@ class ImageUploader {
     }
 }
 
+// 导航栏汉堡菜单控制
+function initNavbarToggle() {
+    const toggleBtn = document.getElementById('navbar-toggle');
+    const navbarMenu = document.getElementById('navbar-menu');
+    
+    if (toggleBtn && navbarMenu) {
+        toggleBtn.addEventListener('click', () => {
+            toggleBtn.classList.toggle('active');
+            navbarMenu.classList.toggle('active');
+        });
+
+        const navLinks = navbarMenu.querySelectorAll('a.nav-link');
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                toggleBtn.classList.remove('active');
+                navbarMenu.classList.remove('active');
+            });
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!toggleBtn.contains(e.target) && !navbarMenu.contains(e.target)) {
+                toggleBtn.classList.remove('active');
+                navbarMenu.classList.remove('active');
+            }
+        });
+    }
+}
+
 // 初始化应用
 document.addEventListener('DOMContentLoaded', async () => {
-    // 如果有token，尝试获取用户信息
+    initNavbarToggle();
+
     if (AppState.token) {
         await http.getCurrentUser();
     }
@@ -580,6 +609,149 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// 通用工具函数
+const HouseUtils = {
+    getHouseTypeLabel(type) {
+        const labels = {
+            'apartment': '公寓',
+            'house': '住宅',
+            'villa': '别墅',
+            'shop': '商铺',
+            'office': '写字楼'
+        };
+        return labels[type] || type;
+    },
+
+    getOrientationLabel(orientation) {
+        const labels = {
+            'south': '朝南',
+            'north': '朝北',
+            'east': '朝东',
+            'west': '朝西',
+            'southeast': '东南',
+            'southwest': '西南',
+            'northeast': '东北',
+            'northwest': '西北'
+        };
+        return labels[orientation] || orientation;
+    },
+
+    getDecorationLabel(decoration) {
+        const labels = {
+            'rough': '毛坯',
+            'simple': '简装',
+            'standard': '中装',
+            'fine': '精装',
+            'luxury': '豪装'
+        };
+        return labels[decoration] || decoration;
+    },
+
+    getRoleLabel(role) {
+        const labels = {
+            'user': '普通用户',
+            'landlord': '房东',
+            'agent': '业务员',
+            'admin': '管理员'
+        };
+        return labels[role] || role;
+    },
+
+    formatDate(dateStr) {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('zh-CN');
+    },
+
+    getDefaultImage() {
+        return 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20apartment%20building%20exterior&image_size=square_hd';
+    },
+
+    renderHouseCard(house) {
+        const image = house.images && house.images.length > 0 && house.images[0].url 
+            ? house.images[0].url 
+            : this.getDefaultImage();
+        
+        const price = house.price ? house.price.toLocaleString() : '0';
+        const title = house.title || '房源';
+        const area = house.area || 0;
+        const bedrooms = house.bedrooms || 0;
+        const livingrooms = house.livingrooms || 0;
+        const city = house.city || '';
+        const district = house.district || '';
+        const views = house.views || 0;
+        const isFavorited = house.is_favorited || false;
+        
+        return `
+            <div class="card house-card">
+                <a href="/houses/${house.id}">
+                    <div class="house-card-image">
+                        <img src="${image}" alt="${title}" onerror="this.src='${this.getDefaultImage()}'">
+                        <span class="house-card-badge">${this.getHouseTypeLabel(house.house_type)}</span>
+                        <button class="house-card-favorite" data-house-id="${house.id}" data-is-favorite="${isFavorited}">
+                            ${isFavorited ? '❤️' : '🤍'}
+                        </button>
+                    </div>
+                    <div class="house-card-content">
+                        <h3 class="house-card-title">${title}</h3>
+                        <div class="house-card-price">${price}<span>/月</span></div>
+                        <div class="house-card-info">
+                            <span>${area}㎡</span>
+                            <span>${bedrooms}室${livingrooms}厅</span>
+                            <span>${this.getOrientationLabel(house.orientation)}</span>
+                        </div>
+                    </div>
+                    <div class="house-card-footer">
+                        <span>${city} ${district}</span>
+                        <span>${views} 浏览</span>
+                    </div>
+                </a>
+            </div>
+        `;
+    }
+};
+
+// 收藏相关操作
+const FavoriteManager = {
+    async toggleFavorite(houseId, btn) {
+        if (!AppState.token) {
+            Toast.warning('请先登录');
+            window.location.href = '/login';
+            return;
+        }
+
+        const isFavorite = btn.dataset.isFavorite === 'true';
+        
+        try {
+            if (isFavorite) {
+                await http.delete(`/api/houses/${houseId}/favorite`);
+                btn.innerHTML = '🤍';
+                btn.dataset.isFavorite = 'false';
+                Toast.success('已取消收藏');
+            } else {
+                await http.post(`/api/houses/${houseId}/favorite`);
+                btn.innerHTML = '❤️';
+                btn.dataset.isFavorite = 'true';
+                Toast.success('已添加收藏');
+            }
+        } catch (error) {
+            Toast.error(error.message || '操作失败');
+        }
+    },
+
+    bindFavoriteButtons(container) {
+        const favoriteBtns = container.querySelectorAll('.house-card-favorite');
+        favoriteBtns.forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const houseId = btn.dataset.houseId;
+                await this.toggleFavorite(houseId, btn);
+            });
+        });
+    }
+};
+
 // 导出供其他脚本使用
 window.AppState = AppState;
 window.http = http;
@@ -587,3 +759,5 @@ window.Toast = Toast;
 window.FormUtils = FormUtils;
 window.Pagination = Pagination;
 window.ImageUploader = ImageUploader;
+window.HouseUtils = HouseUtils;
+window.FavoriteManager = FavoriteManager;

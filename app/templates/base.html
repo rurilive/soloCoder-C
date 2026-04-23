@@ -12,24 +12,33 @@
         <div class="container">
             <div class="navbar-content">
                 <a href="/" class="navbar-brand">🏠 租房管理系统</a>
-                <ul class="navbar-menu">
-                    <li><a href="/">首页</a></li>
-                    <li><a href="/houses">房源列表</a></li>
+                <button class="navbar-toggle" id="navbar-toggle" aria-label="菜单">
+                    <span class="navbar-toggle-icon"></span>
+                    <span class="navbar-toggle-icon"></span>
+                    <span class="navbar-toggle-icon"></span>
+                </button>
+                <ul class="navbar-menu" id="navbar-menu">
+                    <li><a href="/" class="nav-link">首页</a></li>
+                    <li><a href="/houses" class="nav-link">房源列表</a></li>
                     {% if request.state.current_user %}
-                        <li><a href="/publish">发布房源</a></li>
-                        <li><a href="/user/favorites">我的收藏</a></li>
-                        <li><a href="/messages">消息中心</a></li>
+                        <li><a href="/publish" class="nav-link">发布房源</a></li>
+                        <li><a href="/user/favorites" class="nav-link">我的收藏</a></li>
+                        <li><a href="/messages" class="nav-link">消息中心</a></li>
                     {% endif %}
-                    <li id="user-info">
+                    <li class="nav-user-section" id="user-info">
                         {% if request.state.current_user %}
-                            <span class="text-sm text-secondary">
+                            <span class="nav-username text-sm text-secondary">
                                 {{ request.state.current_user.nickname or request.state.current_user.username }}
                             </span>
-                            <a href="/user/profile" class="btn btn-sm btn-primary ml-2">个人中心</a>
-                            <a href="#" id="logout-btn" class="btn btn-sm btn-secondary ml-2">退出</a>
+                            <div class="nav-buttons">
+                                <a href="/user/profile" class="btn btn-sm btn-primary">个人中心</a>
+                                <a href="#" id="logout-btn" class="btn btn-sm btn-secondary">退出</a>
+                            </div>
                         {% else %}
-                            <a href="/login" class="btn btn-sm btn-secondary">登录</a>
-                            <a href="/register" class="btn btn-sm btn-primary ml-2">注册</a>
+                            <div class="nav-buttons">
+                                <a href="/login" class="btn btn-sm btn-secondary">登录</a>
+                                <a href="/register" class="btn btn-sm btn-primary">注册</a>
+                            </div>
                         {% endif %}
                     </li>
                 </ul>
