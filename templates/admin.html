@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 打码平台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header h1 span {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        .stat-card h3 {
+            color: #888;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-card .change {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        .card h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        th {
+            background: #f8f9ff;
+            font-weight: 600;
+            color: #667eea;
+            font-size: 13px;
+        }
+        tr:hover {
+            background: #f8f9ff;
+        }
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .badge-admin {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .badge-user {
+            background: #cce5ff;
+            color: #004085;
+        }
+        .type-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        .type-item {
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 10px;
+        }
+        .type-item h4 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .type-item .type-stats-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+        .type-item .type-stats-row span {
+            color: #888;
+        }
+        .type-item .type-stats-row strong {
+            color: #333;
+        }
+        .progress-bar {
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        .full-width {
+            grid-template-columns: 1fr;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #888;
+        }
+        @media (max-width: 900px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 <span>管理后台</span></h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="window.location.href='/'">返回前台</button>
+                <button class="btn btn-secondary" onclick="logout()">退出登录</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>👥 注册用户</h3>
+                <div class="value" id="totalUsers">0</div>
+                <div class="change">平台总用户数</div>
+            </div>
+            <div class="stat-card">
+                <h3>🔢 总验证码</h3>
+                <div class="value" id="totalCaptcha">0</div>
+                <div class="change">用户提交的验证码总数</div>
+            </div>
+            <div class="stat-card">
+                <h3>✅ 正确数量</h3>
+                <div class="value" id="correctCaptcha">0</div>
+                <div class="change">打码正确数量</div>
+            </div>
+            <div class="stat-card">
+                <h3>📊 整体正确率</h3>
+                <div class="value" id="overallAccuracy">0%</div>
+                <div class="change">平均正确率</div>
+            </div>
+        </div>
+
+        <div class="two-column">
+            <div class="card">
+                <h2>👥 用户排行榜</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>用户名</th>
+                            <th>角色</th>
+                            <th>总次数</th>
+                            <th>正确率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                    </tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h2>📈 各类型统计</h2>
+                <div class="type-stats" id="typeStats">
+                </div>
+            </div>
+        </div>
+
+        <div class="two-column full-width">
+            <div class="card">
+                <h2>🕐 最近活动记录</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>用户</th>
+                            <th>验证码类型</th>
+                            <th>用户输入</th>
+                            <th>正确答案</th>
+                            <th>结果</th>
+                            <th>时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('token');
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/';
+        }
+
+        async function checkAuth() {
+            if (!token) {
+                window.location.href = '/';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/user/info', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                    return;
+                }
+
+                const data = await response.json();
+                if (!data.user.is_admin) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                await loadStats();
+            } catch (error) {
+                console.error('检查权限失败:', error);
+                window.location.href = '/';
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const [statsResponse, usersResponse] = await Promise.all([
+                    fetch('/api/admin/stats', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch('/api/admin/users', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                ]);
+
+                if (statsResponse.ok && usersResponse.ok) {
+                    const statsData = await statsResponse.json();
+                    const usersData = await usersResponse.json();
+                    
+                    updateStatsDisplay(statsData.stats);
+                    updateUserTable(usersData.users);
+                    updateTypeStats(statsData.stats.type_breakdown);
+                    updateActivityTable(statsData.stats.recent_activity);
+                }
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        }
+
+        function updateStatsDisplay(stats) {
+            document.getElementById('totalUsers').textContent = stats.total_users;
+            document.getElementById('totalCaptcha').textContent = stats.total_captcha;
+            document.getElementById('correctCaptcha').textContent = stats.correct_captcha;
+            document.getElementById('overallAccuracy').textContent = `${stats.overall_accuracy}%`;
+        }
+
+        function updateUserTable(users) {
+            const tbody = document.getElementById('userTableBody');
+            
+            users.sort((a, b) => b.total_captcha - a.total_captcha);
+            
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">暂无用户数据</div></td></tr>';
+                return;
+            }
+
+            const typeNames = {
+                'digits': '数字',
+                'letters': '字母',
+                'mixed': '混合',
+                'math': '数学'
+            };
+
+            tbody.innerHTML = users.map((user, index) => `
+                <tr>
+                    <td><strong>${index + 1}</strong></td>
+                    <td><strong>${user.username}</strong></td>
+                    <td><span class="badge ${user.is_admin ? 'badge-admin' : 'badge-user'}">${user.is_admin ? '管理员' : '普通用户'}</span></td>
+                    <td>${user.total_captcha}</td>
+                    <td>
+                        <strong>${user.accuracy}%</strong>
+                        <div class="progress-bar" style="width: 80px; margin-top: 4px;">
+                            <div class="progress-bar-fill" style="width: ${user.accuracy}%"></div>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateTypeStats(typeBreakdown) {
+            const container = document.getElementById('typeStats');
+            
+            if (!typeBreakdown || typeBreakdown.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无数据</div>';
+                return;
+            }
+
+            const typeNames = {
+                'digits': '🔢 数字验证码',
+                'letters': '🔤 字母验证码',
+                'mixed': '🔀 混合验证码',
+                'math': '🧮 数学运算'
+            };
+
+            container.innerHTML = typeBreakdown.map(stat => `
+                <div class="type-item">
+                    <h4>${typeNames[stat.type] || stat.type}</h4>
+                    <div class="type-stats-row">
+                        <span>总次数</span><strong>${stat.total}</strong>
+                    </div>
+                    <div class="type-stats-row">
+                        <span>正确率</span><strong>${stat.accuracy}%</strong>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: ${stat.accuracy}%"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateActivityTable(activity) {
+            const tbody = document.getElementById('activityTableBody');
+            
+            if (!activity || activity.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无活动记录</div></td></tr>';
+                return;
+            }
+
+            const typeNames = {
+                'digits': '数字',
+                'letters': '字母',
+                'mixed': '混合',
+                'math': '数学'
+            };
+
+            tbody.innerHTML = activity.map(record => `
+                <tr>
+                    <td><strong>${record.username}</strong></td>
+                    <td>${typeNames[record.captcha_type] || record.captcha_type}</td>
+                    <td style="font-family: monospace;">${record.user_input}</td>
+                    <td style="font-family: monospace; color: #28a745;">${record.correct_answer}</td>
+                    <td>
+                        <span class="badge ${record.is_correct ? 'badge-success' : 'badge-danger'}">
+                            ${record.is_correct ? '正确' : '错误'}
+                        </span>
+                    </td>
+                    <td class="timestamp">${formatTime(record.created_at)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+            
+            return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        checkAuth();
+        
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>
