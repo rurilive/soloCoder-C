@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}{{ query }} - 搜索结果{% endblock %}
+
+{% block content %}
+<h1 class="page-title">
+    {% if query %}
+        搜索: "{{ query }}"
+    {% else %}
+        搜索音乐
+    {% endif %}
+</h1>
+
+<div class="search-type-tabs">
+    <button class="tab-btn {{ 'active' if search_type == 'all' }}" onclick="searchWithType('all')">全部</button>
+    <button class="tab-btn {{ 'active' if search_type == 'songs' }}" onclick="searchWithType('songs')">歌曲</button>
+    <button class="tab-btn {{ 'active' if search_type == 'artists' }}" onclick="searchWithType('artists')">艺术家</button>
+    <button class="tab-btn {{ 'active' if search_type == 'albums' }}" onclick="searchWithType('albums')">专辑</button>
+</div>
+
+<div class="loading" id="loadingIndicator">
+    <div class="spinner"></div>
+    <p>搜索中...</p>
+</div>
+
+<div id="searchResults">
+    {% if query %}
+    <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <div class="empty-state-title">输入关键词搜索</div>
+        <p>搜索歌曲、艺术家或专辑</p>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">🎶</div>
+        <div class="empty-state-title">开始探索音乐</div>
+        <p>在上方搜索框输入关键词开始搜索</p>
+    </div>
+    {% endif %}
+</div>
+
+<div id="addToPlaylistModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 3000; display: none; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-card); border-radius: 12px; padding: 24px; min-width: 300px; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+        <h3 style="margin-bottom: 16px; font-size: 18px;">添加到歌单</h3>
+        <div id="playlistOptions" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;"></div>
+        <div style="display: flex; gap: 12px;">
+            <button class="tab-btn" onclick="closePlaylistModal()" style="flex: 1; background: var(--bg-hover);">取消</button>
+            <button class="tab-btn active" onclick="createNewPlaylistFromModal()" style="flex: 1;">➕ 新建歌单</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const query = "{{ query|escapejs }}";
+    const searchType = "{{ search_type|escapejs }}";
+    let currentSongToAdd = null;
+    let availablePlaylists = [];
+    
+    function searchWithType(type) {
+        if (query) {
+            window.location.href = `/search?q=${encodeURIComponent(query)}&type=${type}`;
+        }
+    }
+    
+    async function performSearch() {
+        if (!query) return;
+        
+        const resultsContainer = document.getElementById('searchResults');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        resultsContainer.innerHTML = '';
+        loadingIndicator.classList.add('show');
+        
+        try {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${searchType}&limit=20`);
+            const data = await response.json();
+            
+            loadingIndicator.classList.remove('show');
+            renderResults(data);
+            
+        } catch (e) {
+            loadingIndicator.classList.remove('show');
+            resultsContainer.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">❌</div>
+                    <div class="empty-state-title">搜索出错</div>
+                    <p>${e.message}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function renderResults(data) {
+        const container = document.getElementById('searchResults');
+        let html = '';
+        
+        const hasSongs = data.songs && data.songs.length > 0;
+        const hasArtists = data.artists && data.artists.length > 0;
+        const hasAlbums = data.albums && data.albums.length > 0;
+        
+        if (!hasSongs && !hasArtists && !hasAlbums) {
+            html = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">😔</div>
+                    <div class="empty-state-title">未找到结果</div>
+                    <p>尝试使用其他关键词搜索</p>
+                </div>
+            `;
+        } else {
+            if (hasSongs && (searchType === 'all' || searchType === 'songs')) {
+                html += `
+                    <div class="results-section">
+                        <h2 class="section-title">歌曲 (${data.songs.length})</h2>
+                        <div class="cards-grid">
+                            ${data.songs.map(song => renderSongCard(song)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (hasArtists && (searchType === 'all' || searchType === 'artists')) {
+                html += `
+                    <div class="results-section">
+                        <h2 class="section-title">艺术家 (${data.artists.length})</h2>
+                        <div class="cards-grid">
+                            ${data.artists.map(artist => renderArtistCard(artist)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (hasAlbums && (searchType === 'all' || searchType === 'albums')) {
+                html += `
+                    <div class="results-section">
+                        <h2 class="section-title">专辑 (${data.albums.length})</h2>
+                        <div class="cards-grid">
+                            ${data.albums.map(album => renderAlbumCard(album)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    function renderSongCard(song) {
+        const coverUrl = song.cover_url ? `src="${song.cover_url}"` : '';
+        const coverDisplay = song.cover_url 
+            ? `<img ${coverUrl} alt="${song.name}">`
+            : '🎵';
+        
+        return `
+            <div class="card">
+                <div class="card-image" onclick="playSong(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}')">${coverDisplay}</div>
+                <div class="card-title">${song.name}</div>
+                <div class="card-subtitle">${song.artist_name || '未知艺术家'}</div>
+                <button class="play-btn" onclick="event.stopPropagation(); playSong(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}')">▶</button>
+                <div style="position: absolute; top: 8px; right: 8px;">
+                    <button style="background: rgba(0,0,0,0.7); border: none; color: white; cursor: pointer; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; opacity: 0; transition: opacity 0.2s;" 
+                            class="add-to-playlist-btn"
+                            onmouseenter="this.style.opacity='1'"
+                            onmouseleave="this.style.opacity='0'"
+                            onclick="event.stopPropagation(); showAddToPlaylistModal(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}')"
+                            title="添加到歌单">
+                        ➕
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    function renderArtistCard(artist) {
+        const coverUrl = artist.image_url ? `src="${artist.image_url}"` : '';
+        const coverDisplay = artist.image_url 
+            ? `<img ${coverUrl} alt="${artist.name}">`
+            : '👤';
+        
+        return `
+            <div class="card" onclick="handleCardClick(${artist.id}, 'artist', '${escapeHtml(artist.name)}', '', '${escapeHtml(artist.image_url || '')}')">
+                <div class="card-image">${coverDisplay}</div>
+                <div class="card-title">${artist.name}</div>
+                <div class="card-subtitle">艺术家</div>
+            </div>
+        `;
+    }
+    
+    function renderAlbumCard(album) {
+        const coverUrl = album.cover_url ? `src="${album.cover_url}"` : '';
+        const coverDisplay = album.cover_url 
+            ? `<img ${coverUrl} alt="${album.name}">`
+            : '💿';
+        
+        return `
+            <div class="card" onclick="handleCardClick(${album.id}, 'album', '${escapeHtml(album.name)}', '${escapeHtml(album.artist_name || '')}', '${escapeHtml(album.cover_url || '')}')">
+                <div class="card-image">${coverDisplay}</div>
+                <div class="card-title">${album.name}</div>
+                <div class="card-subtitle">${album.artist_name || '未知艺术家'}</div>
+            </div>
+        `;
+    }
+    
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    }
+    
+    function handleCardClick(id, type, name, artist, cover) {
+        if (type === 'song') {
+            playSong(id, name, artist, cover);
+        } else if (type === 'artist') {
+            showToast('艺术家功能开发中');
+        } else if (type === 'album') {
+            showToast('专辑功能开发中');
+        }
+    }
+    
+    async function showAddToPlaylistModal(songId, songName, artistName, coverUrl) {
+        currentSongToAdd = { id: songId, name: songName, artist: artistName, cover: coverUrl };
+        
+        const modal = document.getElementById('addToPlaylistModal');
+        const optionsContainer = document.getElementById('playlistOptions');
+        
+        try {
+            const response = await fetch('/api/playlists');
+            availablePlaylists = await response.json();
+            
+            if (availablePlaylists.length === 0) {
+                optionsContainer.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                        暂无歌单，点击下方按钮创建
+                    </div>
+                `;
+            } else {
+                optionsContainer.innerHTML = availablePlaylists.map(playlist => `
+                    <button style="background: var(--bg-hover); border: none; color: var(--text-primary); padding: 12px 16px; border-radius: 8px; cursor: pointer; text-align: left; transition: background 0.2s;"
+                            onmouseenter="this.style.background='var(--primary-color)'; this.style.color='var(--bg-dark)'"
+                            onmouseleave="this.style.background='var(--bg-hover)'; this.style.color='var(--text-primary)'"
+                            onclick="addSongToPlaylist(${playlist.id}, ${songId})">
+                        <div style="font-weight: 500;">${playlist.name}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${playlist.song_count} 首歌曲</div>
+                    </button>
+                `).join('');
+            }
+            
+            modal.style.display = 'flex';
+            
+        } catch (e) {
+            showToast('加载歌单失败', 'error');
+        }
+    }
+    
+    function closePlaylistModal() {
+        const modal = document.getElementById('addToPlaylistModal');
+        modal.style.display = 'none';
+        currentSongToAdd = null;
+    }
+    
+    async function addSongToPlaylist(playlistId, songId) {
+        try {
+            const response = await fetch(`/api/playlists/${playlistId}/songs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ song_id: songId })
+            });
+            
+            const result = await response.json();
+            
+            if (result.added !== false) {
+                showToast('已添加到歌单');
+                closePlaylistModal();
+            } else {
+                showToast('歌曲已在歌单中');
+                closePlaylistModal();
+            }
+            
+        } catch (e) {
+            showToast('添加失败', 'error');
+        }
+    }
+    
+    async function createNewPlaylistFromModal() {
+        const name = prompt('输入歌单名称:', '新歌单');
+        if (!name) return;
+        
+        try {
+            const response = await fetch('/api/playlists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            
+            if (response.ok) {
+                const playlist = await response.json();
+                if (currentSongToAdd) {
+                    await addSongToPlaylist(playlist.id, currentSongToAdd.id);
+                } else {
+                    showToast('歌单创建成功');
+                    closePlaylistModal();
+                }
+            }
+        } catch (e) {
+            showToast('创建失败', 'error');
+        }
+    }
+    
+    document.getElementById('addToPlaylistModal').addEventListener('click', (e) => {
+        if (e.target.id === 'addToPlaylistModal') {
+            closePlaylistModal();
+        }
+    });
+    
+    if (query) {
+        performSearch();
+    }
+</script>
+{% endblock %}

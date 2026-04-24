@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}音乐在线播放平台{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 60px 20px;">
+    <h1 style="font-size: 48px; margin-bottom: 24px; background: linear-gradient(135deg, var(--primary-color), #1ed760); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        🎵 音乐在线播放平台
+    </h1>
+    <p style="font-size: 18px; color: var(--text-secondary); margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto;">
+        发现、播放和管理您喜爱的音乐。支持搜索、歌单管理、音频可视化和智能推荐。
+    </p>
+    
+    <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 60px;">
+        <a href="/search" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; background: var(--primary-color); color: var(--bg-dark); text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; transition: transform 0.2s;">
+            🔍 搜索音乐
+        </a>
+        <a href="/playlists" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; background: var(--bg-card); color: var(--text-primary); text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; transition: background 0.2s;">
+            📋 我的歌单
+        </a>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; max-width: 900px; margin: 0 auto; text-align: left;">
+        <div style="background: var(--bg-card); padding: 24px; border-radius: var(--border-radius);">
+            <div style="font-size: 32px; margin-bottom: 12px;">🎧</div>
+            <h3 style="margin-bottom: 8px;">高质量播放</h3>
+            <p style="color: var(--text-secondary); font-size: 14px;">支持高质量音频流，流畅的播放体验</p>
+        </div>
+        <div style="background: var(--bg-card); padding: 24px; border-radius: var(--border-radius);">
+            <div style="font-size: 32px; margin-bottom: 12px;">🎨</div>
+            <h3 style="margin-bottom: 8px;">音频可视化</h3>
+            <p style="color: var(--text-secondary); font-size: 14px;">多种动态可视化效果，让音乐更生动</p>
+        </div>
+        <div style="background: var(--bg-card); padding: 24px; border-radius: var(--border-radius);">
+            <div style="font-size: 32px; margin-bottom: 12px;">📚</div>
+            <h3 style="margin-bottom: 8px;">歌单管理</h3>
+            <p style="color: var(--text-secondary); font-size: 14px;">创建和管理您的个人歌单</p>
+        </div>
+        <div style="background: var(--bg-card); padding: 24px; border-radius: var(--border-radius);">
+            <div style="font-size: 32px; margin-bottom: 12px;">✨</div>
+            <h3 style="margin-bottom: 8px;">智能推荐</h3>
+            <p style="color: var(--text-secondary); font-size: 14px;">基于知识图谱的个性化推荐</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

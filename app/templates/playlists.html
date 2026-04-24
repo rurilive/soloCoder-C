@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}我的歌单{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <h1 class="page-title" style="margin-bottom: 0;">我的歌单</h1>
+    <button class="tab-btn active" onclick="createNewPlaylist()" style="font-size: 14px;">
+        ➕ 新建歌单
+    </button>
+</div>
+
+<div class="loading" id="playlistsLoading">
+    <div class="spinner"></div>
+    <p>加载中...</p>
+</div>
+
+<div id="playlistsContainer">
+    <div class="empty-state" id="emptyPlaylists">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">暂无歌单</div>
+        <p>点击上方按钮创建您的第一个歌单</p>
+    </div>
+    
+    <div class="cards-grid" id="playlistsGrid" style="display: none;"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadPlaylists() {
+        const loading = document.getElementById('playlistsLoading');
+        const emptyState = document.getElementById('emptyPlaylists');
+        const grid = document.getElementById('playlistsGrid');
+        
+        loading.classList.add('show');
+        emptyState.style.display = 'none';
+        grid.style.display = 'none';
+        
+        try {
+            const response = await fetch('/api/playlists');
+            const playlists = await response.json();
+            
+            loading.classList.remove('show');
+            
+            if (playlists.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                grid.style.display = 'grid';
+                renderPlaylists(playlists);
+            }
+            
+        } catch (e) {
+            loading.classList.remove('show');
+            emptyState.style.display = 'block';
+            showToast('加载歌单失败', 'error');
+        }
+    }
+    
+    function renderPlaylists(playlists) {
+        const grid = document.getElementById('playlistsGrid');
+        grid.innerHTML = playlists.map(playlist => `
+            <div class="card" onclick="goToPlaylist(${playlist.id})">
+                <div class="card-image">${playlist.cover_url ? `<img src="${playlist.cover_url}" alt="${playlist.name}">` : '📋'}</div>
+                <div class="card-title">${playlist.name}</div>
+                <div class="card-subtitle">${playlist.song_count} 首歌曲</div>
+                <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;">
+                    <button class="play-btn" style="position: static; width: 32px; height: 32px; font-size: 14px; opacity: 1;" 
+                        onclick="event.stopPropagation(); renamePlaylist(${playlist.id}, '${escapeHtml(playlist.name)}')" title="重命名">✏️</button>
+                    <button class="play-btn" style="position: static; width: 32px; height: 32px; font-size: 14px; opacity: 1; background: #e74c3c;" 
+                        onclick="event.stopPropagation(); deletePlaylist(${playlist.id})" title="删除">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function goToPlaylist(playlistId) {
+        window.location.href = `/playlists/${playlistId}`;
+    }
+    
+    async function createNewPlaylist() {
+        const name = prompt('输入歌单名称:', '新歌单');
+        if (!name) return;
+        
+        try {
+            const response = await fetch('/api/playlists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            
+            if (response.ok) {
+                showToast('歌单创建成功');
+                loadPlaylists();
+            } else {
+                showToast('创建失败');
+            }
+        } catch (e) {
+            showToast('创建失败');
+        }
+    }
+    
+    async function renamePlaylist(playlistId, currentName) {
+        const newName = prompt('输入新名称:', currentName);
+        if (!newName || newName === currentName) return;
+        
+        try {
+            const response = await fetch(`/api/playlists/${playlistId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName })
+            });
+            
+            if (response.ok) {
+                showToast('重命名成功');
+                loadPlaylists();
+            } else {
+                showToast('重命名失败');
+            }
+        } catch (e) {
+            showToast('重命名失败');
+        }
+    }
+    
+    async function deletePlaylist(playlistId) {
+        if (!confirm('确定要删除这个歌单吗？此操作不可恢复。')) return;
+        
+        try {
+            const response = await fetch(`/api/playlists/${playlistId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                showToast('歌单已删除');
+                loadPlaylists();
+            } else {
+                showToast('删除失败');
+            }
+        } catch (e) {
+            showToast('删除失败');
+        }
+    }
+    
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    loadPlaylists();
+</script>
+{% endblock %}
