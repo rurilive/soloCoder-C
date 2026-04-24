@@ -1,10 +1,11 @@
 import os
 import uuid
+import math
 from datetime import datetime
 from typing import List, Optional
 from collections import defaultdict
 
-from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse, HTMLResponse, Response
@@ -24,6 +25,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
+
+PAGE_SIZE = 12
 
 
 @app.on_event("startup")
@@ -70,11 +73,60 @@ def render_template(template_name: str, context: dict) -> str:
     return template.render(**context)
 
 
+def get_pagination_info(total: int, page: int, page_size: int) -> dict:
+    total_pages = math.ceil(total / page_size)
+    has_prev = page > 1
+    has_next = page < total_pages
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": has_prev,
+        "has_next": has_next,
+        "prev_page": page - 1 if has_prev else None,
+        "next_page": page + 1 if has_next else None,
+        "start_item": (page - 1) * page_size + 1 if total > 0 else 0,
+        "end_item": min(page * page_size, total),
+    }
+
+
+def build_pagination_url(page: int, current_view: str, **kwargs) -> str:
+    if current_view == "search" and kwargs.get("search_query"):
+        return f"/?q={kwargs.get('search_query')}&page={page}"
+    elif current_view == "tag" and kwargs.get("current_tag"):
+        return f"/tag/{kwargs.get('current_tag')}?page={page}"
+    elif current_view == "date" and kwargs.get("current_date"):
+        return f"/date/{kwargs.get('current_date')}?page={page}"
+    else:
+        return f"/?page={page}"
+
+
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request, db: Session = Depends(get_db)):
-    photos = db.query(Photo).order_by(Photo.created_at.desc()).all()
+async def index(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: Optional[str] = Query(None, description="搜索关键词"),
+    page: int = Query(1, ge=1, description="页码"),
+):
+    query = db.query(Photo)
+    
+    if q:
+        query = query.filter(Photo.description.like(f"%{q}%"))
+    
+    total = query.count()
+    
+    photos = (
+        query.order_by(Photo.created_at.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+    
     tags = get_all_tags(db)
     date_groups = get_date_groups(db)
+    pagination = get_pagination_info(total, page, PAGE_SIZE)
+    
     return HTMLResponse(content=render_template(
         "index.html",
         {
@@ -82,32 +134,53 @@ async def index(request: Request, db: Session = Depends(get_db)):
             "photos": photos,
             "tags": tags,
             "date_groups": date_groups,
-            "current_view": "all",
+            "current_view": "search" if q else "all",
+            "search_query": q,
+            "pagination": pagination,
         },
     ))
 
 
 @app.get("/tag/{tag}", response_class=HTMLResponse)
-async def photos_by_tag(tag: str, request: Request, db: Session = Depends(get_db)):
+async def photos_by_tag(
+    tag: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="页码"),
+):
     photos = db.query(Photo).filter(Photo.tags.like(f"%{tag}%")).order_by(Photo.created_at.desc()).all()
     filtered_photos = [p for p in photos if tag in p.get_tags_list()]
+    
+    total = len(filtered_photos)
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    paged_photos = filtered_photos[start_idx:end_idx]
+    
     tags = get_all_tags(db)
     date_groups = get_date_groups(db)
+    pagination = get_pagination_info(total, page, PAGE_SIZE)
+    
     return HTMLResponse(content=render_template(
         "index.html",
         {
             "request": request,
-            "photos": filtered_photos,
+            "photos": paged_photos,
             "tags": tags,
             "date_groups": date_groups,
             "current_view": "tag",
             "current_tag": tag,
+            "pagination": pagination,
         },
     ))
 
 
 @app.get("/date/{year_month}", response_class=HTMLResponse)
-async def photos_by_date(year_month: str, request: Request, db: Session = Depends(get_db)):
+async def photos_by_date(
+    year_month: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="页码"),
+):
     try:
         year, month = map(int, year_month.split("-"))
     except ValueError:
@@ -118,17 +191,26 @@ async def photos_by_date(year_month: str, request: Request, db: Session = Depend
         p for p in photos 
         if p.created_at.year == year and p.created_at.month == month
     ]
+    
+    total = len(filtered_photos)
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    paged_photos = filtered_photos[start_idx:end_idx]
+    
     tags = get_all_tags(db)
     date_groups = get_date_groups(db)
+    pagination = get_pagination_info(total, page, PAGE_SIZE)
+    
     return HTMLResponse(content=render_template(
         "index.html",
         {
             "request": request,
-            "photos": filtered_photos,
+            "photos": paged_photos,
             "tags": tags,
             "date_groups": date_groups,
             "current_view": "date",
             "current_date": year_month,
+            "pagination": pagination,
         },
     ))
 
