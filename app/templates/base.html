@@ -727,7 +727,7 @@
             }, 3000);
         }
         
-        async function playSong(songId, songName, artistName, coverUrl) {
+        async function playSong(songId, songName, artistName, coverUrl, audioUrl) {
             try {
                 document.getElementById('playerBar').classList.add('active');
                 document.getElementById('playerSongName').textContent = songName || '未知歌曲';
@@ -740,10 +740,14 @@
                     coverEl.textContent = '🎵';
                 }
                 
-                audio.src = `/api/stream/${songId}`;
+                if (audioUrl && audioUrl.startsWith('http')) {
+                    audio.src = audioUrl;
+                } else {
+                    audio.src = `/api/stream/${songId}`;
+                }
                 audio.play();
                 updatePlayPauseButton(true);
-                currentSong = { id: songId, name: songName, artist: artistName, cover: coverUrl };
+                currentSong = { id: songId, name: songName, artist: artistName, cover: coverUrl, audioUrl: audioUrl };
                 
             } catch (e) {
                 showToast('播放失败: ' + e.message);

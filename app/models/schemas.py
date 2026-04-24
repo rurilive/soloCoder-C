@@ -37,6 +37,7 @@ class SongResponse(BaseModel):
     duration: Optional[float] = None
     cover_url: Optional[str] = None
     genre_name: Optional[str] = None
+    audio_url: Optional[str] = None
 
     class Config:
         from_attributes = True

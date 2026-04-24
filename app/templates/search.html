@@ -152,12 +152,14 @@
             ? `<img ${coverUrl} alt="${song.name}">`
             : '🎵';
         
+        const audioUrl = song.audio_url || '';
+        
         return `
             <div class="card">
-                <div class="card-image" onclick="playSong(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}')">${coverDisplay}</div>
+                <div class="card-image" onclick="playSong(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}', '${escapeHtml(audioUrl)}')">${coverDisplay}</div>
                 <div class="card-title">${song.name}</div>
                 <div class="card-subtitle">${song.artist_name || '未知艺术家'}</div>
-                <button class="play-btn" onclick="event.stopPropagation(); playSong(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}')">▶</button>
+                <button class="play-btn" onclick="event.stopPropagation(); playSong(${song.id}, '${escapeHtml(song.name)}', '${escapeHtml(song.artist_name || '')}', '${escapeHtml(song.cover_url || '')}', '${escapeHtml(audioUrl)}')">▶</button>
                 <div style="position: absolute; top: 8px; right: 8px;">
                     <button style="background: rgba(0,0,0,0.7); border: none; color: white; cursor: pointer; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; opacity: 0; transition: opacity 0.2s;" 
                             class="add-to-playlist-btn"

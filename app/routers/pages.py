@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request
@@ -8,6 +9,15 @@ router = APIRouter()
 
 templates_path = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_path))
+
+
+def escapejs_filter(value):
+    if value is None:
+        return ""
+    return json.dumps(str(value))[1:-1]
+
+
+templates.env.filters['escapejs'] = escapejs_filter
 
 
 @router.get("/", response_class=HTMLResponse)
