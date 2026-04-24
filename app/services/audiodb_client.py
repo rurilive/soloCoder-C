@@ -83,14 +83,26 @@ class AudioDBClient:
         try:
             response = await client.get(url, params=params)
             response.raise_for_status()
-            return response.json()
+            
+            if not response.text or response.text.strip() == "":
+                logger.warning(f"AudioDB API returned empty response for: {url}")
+                return {}
+            
+            try:
+                return response.json()
+            except ValueError as e:
+                logger.warning(f"AudioDB API returned invalid JSON: {e}. Response: {response.text[:200]}")
+                return {}
             
         except httpx.HTTPStatusError as e:
             logger.error(f"AudioDB API HTTP error: {e.response.status_code} - {e}")
-            raise
+            return {}
+        except httpx.RequestError as e:
+            logger.error(f"AudioDB API request error: {e}")
+            return {}
         except Exception as e:
-            logger.error(f"AudioDB API request failed: {e}")
-            raise
+            logger.error(f"AudioDB API unexpected error: {e}")
+            return {}
     
     def _get_sample_audio_url(self, track_id: str) -> str:
         index = abs(hash(track_id)) % len(self.SAMPLE_PREVIEW_URLS)
@@ -102,10 +114,20 @@ class AudioDBClient:
         try:
             data = await self._request("searchtrack.php", {"s": query})
             
+            if not data:
+                logger.warning("AudioDB returned no data for track search")
+                return tracks
+            
             if data.get("track"):
                 for item in data["track"][:limit]:
                     try:
+                        if not item:
+                            continue
+                            
                         track_id = item.get("idTrack", "")
+                        if not track_id:
+                            continue
+                            
                         preview_url = item.get("strMusicVid") or self._get_sample_audio_url(track_id)
                         
                         if not preview_url or "youtube" in preview_url.lower() or "youtu.be" in preview_url.lower():
@@ -118,10 +140,16 @@ class AudioDBClient:
                                 duration = float(duration_str) / 1000.0
                             except (ValueError, TypeError):
                                 duration = random.uniform(180, 300)
+                        else:
+                            duration = random.uniform(180, 300)
+                        
+                        track_name = item.get("strTrack", "")
+                        if not track_name:
+                            continue
                         
                         track = AudioDBTrack(
                             id=str(track_id),
-                            name=item.get("strTrack", ""),
+                            name=track_name,
                             artist_id=str(item.get("idArtist", "")),
                             artist_name=item.get("strArtist", ""),
                             album_id=str(item.get("idAlbum")) if item.get("idAlbum") else None,
@@ -147,9 +175,16 @@ class AudioDBClient:
         try:
             data = await self._request("search.php", {"s": query})
             
+            if not data:
+                logger.warning("AudioDB returned no data for artist search")
+                return artists
+            
             if data.get("artists"):
                 for item in data["artists"][:limit]:
                     try:
+                        if not item:
+                            continue
+                            
                         artist = AudioDBArtist(
                             id=str(item.get("idArtist", "")),
                             name=item.get("strArtist", ""),
@@ -173,9 +208,16 @@ class AudioDBClient:
         try:
             data = await self._request("searchalbum.php", {"s": query})
             
+            if not data:
+                logger.warning("AudioDB returned no data for album search")
+                return albums
+            
             if data.get("album"):
                 for item in data["album"][:limit]:
                     try:
+                        if not item:
+                            continue
+                            
                         album = AudioDBAlbum(
                             id=str(item.get("idAlbum", "")),
                             name=item.get("strAlbum", ""),
@@ -199,8 +241,14 @@ class AudioDBClient:
         try:
             data = await self._request("track.php", {"h": track_id})
             
+            if not data:
+                return None
+            
             if data.get("track") and len(data["track"]) > 0:
                 item = data["track"][0]
+                if not item:
+                    return None
+                    
                 preview_url = item.get("strMusicVid") or self._get_sample_audio_url(track_id)
                 
                 if not preview_url or "youtube" in preview_url.lower():
@@ -213,10 +261,16 @@ class AudioDBClient:
                         duration = float(duration_str) / 1000.0
                     except (ValueError, TypeError):
                         duration = random.uniform(180, 300)
+                else:
+                    duration = random.uniform(180, 300)
+                
+                track_name = item.get("strTrack", "")
+                if not track_name:
+                    return None
                 
                 return AudioDBTrack(
                     id=str(item.get("idTrack", "")),
-                    name=item.get("strTrack", ""),
+                    name=track_name,
                     artist_id=str(item.get("idArtist", "")),
                     artist_name=item.get("strArtist", ""),
                     album_id=str(item.get("idAlbum")) if item.get("idAlbum") else None,
@@ -235,8 +289,14 @@ class AudioDBClient:
         try:
             data = await self._request("artist.php", {"i": artist_id})
             
+            if not data:
+                return None
+            
             if data.get("artists") and len(data["artists"]) > 0:
                 item = data["artists"][0]
+                if not item:
+                    return None
+                    
                 return AudioDBArtist(
                     id=str(item.get("idArtist", "")),
                     name=item.get("strArtist", ""),
@@ -253,8 +313,14 @@ class AudioDBClient:
         try:
             data = await self._request("album.php", {"m": album_id})
             
+            if not data:
+                return None
+            
             if data.get("album") and len(data["album"]) > 0:
                 item = data["album"][0]
+                if not item:
+                    return None
+                    
                 return AudioDBAlbum(
                     id=str(item.get("idAlbum", "")),
                     name=item.get("strAlbum", ""),
