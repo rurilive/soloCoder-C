@@ -14,9 +14,16 @@ from app.models.schemas import (
     SearchResultResponse,
     PaginatedResponse,
 )
-from app.services import JamendoClient, MusicDataService
+from app.services import (
+    JamendoClient,
+    AudioDBClient,
+    SampleDataGenerator,
+    MusicDataService,
+)
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -100,6 +107,207 @@ async def search_albums_local(
     return albums
 
 
+async def search_external_sources(
+    db: AsyncSession,
+    query: str,
+    limit: int,
+) -> tuple[list[SongResponse], list[ArtistResponse], list[AlbumResponse]]:
+    songs_responses: list[SongResponse] = []
+    artists_responses: list[ArtistResponse] = []
+    albums_responses: list[AlbumResponse] = []
+    
+    data_service = MusicDataService(db)
+    seen_song_ids = set()
+    seen_artist_ids = set()
+    seen_album_ids = set()
+    
+    if settings.jamendo_client_id:
+        try:
+            async with JamendoClient() as client:
+                jamendo_tracks = await client.search_tracks(query, limit)
+                for track in jamendo_tracks[:limit]:
+                    if track.id in seen_song_ids:
+                        continue
+                    seen_song_ids.add(track.id)
+                    
+                    try:
+                        song = await data_service.cache_jamendo_track(track)
+                        if song.artist:
+                            await db.refresh(song, ["artist"])
+                        if song.album:
+                            await db.refresh(song, ["album"])
+                        
+                        songs_responses.append(SongResponse(
+                            id=song.id,
+                            external_id=song.external_id,
+                            source=song.source,
+                            name=song.name,
+                            artist_name=song.artist.name if song.artist else None,
+                            album_name=song.album.name if song.album else None,
+                            duration=song.duration,
+                            cover_url=song.cover_url,
+                            genre_name=song.genre_name,
+                        ))
+                    except Exception as e:
+                        logger.warning(f"Failed to cache Jamendo track: {e}")
+        except Exception as e:
+            logger.warning(f"Jamendo search failed: {e}")
+    
+    try:
+        async with AudioDBClient() as client:
+            audiodb_tracks = await client.search_tracks(query, limit)
+            for track in audiodb_tracks[:limit]:
+                if track.id in seen_song_ids:
+                    continue
+                seen_song_ids.add(track.id)
+                
+                try:
+                    song = await data_service.cache_audiodb_track(track)
+                    if song.artist:
+                        await db.refresh(song, ["artist"])
+                    if song.album:
+                        await db.refresh(song, ["album"])
+                    
+                    songs_responses.append(SongResponse(
+                        id=song.id,
+                        external_id=song.external_id,
+                        source=song.source,
+                        name=song.name,
+                        artist_name=song.artist.name if song.artist else None,
+                        album_name=song.album.name if song.album else None,
+                        duration=song.duration,
+                        cover_url=song.cover_url,
+                        genre_name=song.genre_name,
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to cache AudioDB track: {e}")
+    except Exception as e:
+        logger.warning(f"AudioDB search failed: {e}")
+    
+    if len(songs_responses) < 5:
+        try:
+            sample_generator = SampleDataGenerator()
+            sample_tracks = sample_generator.search_tracks(query, limit)
+            
+            for track in sample_tracks[:limit]:
+                if track.id in seen_song_ids:
+                    continue
+                seen_song_ids.add(track.id)
+                
+                try:
+                    song = await data_service.cache_sample_track(track)
+                    if song.artist:
+                        await db.refresh(song, ["artist"])
+                    if song.album:
+                        await db.refresh(song, ["album"])
+                    
+                    songs_responses.append(SongResponse(
+                        id=song.id,
+                        external_id=song.external_id,
+                        source=song.source,
+                        name=song.name,
+                        artist_name=song.artist.name if song.artist else None,
+                        album_name=song.album.name if song.album else None,
+                        duration=song.duration,
+                        cover_url=song.cover_url,
+                        genre_name=song.genre_name,
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to cache sample track: {e}")
+        except Exception as e:
+            logger.warning(f"Sample generator failed: {e}")
+    
+    if settings.jamendo_client_id:
+        try:
+            async with JamendoClient() as client:
+                jamendo_artists = await client.search_artists(query, limit)
+                for ja in jamendo_artists[:limit]:
+                    if ja.id in seen_artist_ids:
+                        continue
+                    seen_artist_ids.add(ja.id)
+                    
+                    artist = await data_service.cache_jamendo_artist(ja)
+                    artists_responses.append(ArtistResponse(
+                        id=artist.id,
+                        external_id=artist.external_id,
+                        source=artist.source,
+                        name=artist.name,
+                        image_url=artist.image_url,
+                    ))
+        except Exception as e:
+            logger.warning(f"Jamendo artist search failed: {e}")
+    
+    try:
+        async with AudioDBClient() as client:
+            audiodb_artists = await client.search_artists(query, limit)
+            for aa in audiodb_artists[:limit]:
+                if aa.id in seen_artist_ids:
+                    continue
+                seen_artist_ids.add(aa.id)
+                
+                artist = await data_service.cache_audiodb_artist(aa)
+                artists_responses.append(ArtistResponse(
+                    id=artist.id,
+                    external_id=artist.external_id,
+                    source=artist.source,
+                    name=artist.name,
+                    image_url=artist.image_url,
+                ))
+    except Exception as e:
+        logger.warning(f"AudioDB artist search failed: {e}")
+    
+    if settings.jamendo_client_id:
+        try:
+            async with JamendoClient() as client:
+                jamendo_albums = await client.search_albums(query, limit)
+                for ja in jamendo_albums[:limit]:
+                    if ja.id in seen_album_ids:
+                        continue
+                    seen_album_ids.add(ja.id)
+                    
+                    album = await data_service.cache_jamendo_album(ja)
+                    if album.artist:
+                        await db.refresh(album, ["artist"])
+                    
+                    albums_responses.append(AlbumResponse(
+                        id=album.id,
+                        external_id=album.external_id,
+                        source=album.source,
+                        name=album.name,
+                        artist_name=album.artist.name if album.artist else None,
+                        cover_url=album.cover_url,
+                        release_date=album.release_date,
+                    ))
+        except Exception as e:
+            logger.warning(f"Jamendo album search failed: {e}")
+    
+    try:
+        async with AudioDBClient() as client:
+            audiodb_albums = await client.search_albums(query, limit)
+            for aa in audiodb_albums[:limit]:
+                if aa.id in seen_album_ids:
+                    continue
+                seen_album_ids.add(aa.id)
+                
+                album = await data_service.cache_audiodb_album(aa)
+                if album.artist:
+                    await db.refresh(album, ["artist"])
+                
+                albums_responses.append(AlbumResponse(
+                    id=album.id,
+                    external_id=album.external_id,
+                    source=album.source,
+                    name=album.name,
+                    artist_name=album.artist.name if album.artist else None,
+                    cover_url=album.cover_url,
+                    release_date=album.release_date,
+                ))
+    except Exception as e:
+        logger.warning(f"AudioDB album search failed: {e}")
+    
+    return songs_responses, artists_responses, albums_responses
+
+
 @router.get("/search", response_model=SearchResultResponse)
 async def search(
     q: str = Query(..., min_length=1, description="搜索关键词"),
@@ -117,49 +325,10 @@ async def search(
         local_songs = await search_songs_local(db, q, limit, offset)
         
         if not local_songs and use_external:
-            try:
-                async with JamendoClient() as client:
-                    jamendo_tracks = await client.search_tracks(q, limit)
-                    data_service = MusicDataService(db)
-                    cached_songs = await data_service.cache_jamendo_tracks(jamendo_tracks)
-                    for song in cached_songs:
-                        if song.artist:
-                            artist_name = song.artist.name
-                        else:
-                            artist_name = None
-                        if song.album:
-                            album_name = song.album.name
-                        else:
-                            album_name = None
-                        
-                        response.songs.append(SongResponse(
-                            id=song.id,
-                            external_id=song.external_id,
-                            source=song.source,
-                            name=song.name,
-                            artist_name=artist_name,
-                            album_name=album_name,
-                            duration=song.duration,
-                            cover_url=song.cover_url,
-                            genre_name=song.genre_name,
-                        ))
-            except Exception as e:
-                logger.warning(f"External search failed: {e}")
-                local_songs = await search_songs_local(db, q, limit, offset)
-                for song in local_songs:
-                    artist_name = song.artist.name if song.artist else None
-                    album_name = song.album.name if song.album else None
-                    response.songs.append(SongResponse(
-                        id=song.id,
-                        external_id=song.external_id,
-                        source=song.source,
-                        name=song.name,
-                        artist_name=artist_name,
-                        album_name=album_name,
-                        duration=song.duration,
-                        cover_url=song.cover_url,
-                        genre_name=song.genre_name,
-                    ))
+            external_songs, external_artists, external_albums = await search_external_sources(db, q, limit)
+            response.songs = external_songs
+            response.artists = external_artists
+            response.albums = external_albums
         else:
             for song in local_songs:
                 artist_name = song.artist.name if song.artist else None
@@ -176,68 +345,40 @@ async def search(
                     genre_name=song.genre_name,
                 ))
     
-    if type in ["all", "artists"]:
+    if type in ["all", "artists"] and not response.artists:
         local_artists = await search_artists_local(db, q, limit, offset)
         
         if not local_artists and use_external:
-            try:
-                async with JamendoClient() as client:
-                    jamendo_artists = await client.search_artists(q, limit)
-                    data_service = MusicDataService(db)
-                    for ja in jamendo_artists:
-                        artist = await data_service.cache_jamendo_artist(ja)
-                        response.artists.append(ArtistResponse(
-                            id=artist.id,
-                            external_id=artist.external_id,
-                            source=artist.source,
-                            name=artist.name,
-                            image_url=artist.image_url,
-                        ))
-            except Exception as e:
-                logger.warning(f"External artist search failed: {e}")
-        
-        for artist in local_artists:
-            response.artists.append(ArtistResponse(
-                id=artist.id,
-                external_id=artist.external_id,
-                source=artist.source,
-                name=artist.name,
-                image_url=artist.image_url,
-            ))
+            _, external_artists, _ = await search_external_sources(db, q, limit)
+            response.artists = external_artists
+        else:
+            for artist in local_artists:
+                response.artists.append(ArtistResponse(
+                    id=artist.id,
+                    external_id=artist.external_id,
+                    source=artist.source,
+                    name=artist.name,
+                    image_url=artist.image_url,
+                ))
     
-    if type in ["all", "albums"]:
+    if type in ["all", "albums"] and not response.albums:
         local_albums = await search_albums_local(db, q, limit, offset)
         
         if not local_albums and use_external:
-            try:
-                async with JamendoClient() as client:
-                    jamendo_albums = await client.search_albums(q, limit)
-                    data_service = MusicDataService(db)
-                    for ja in jamendo_albums:
-                        album = await data_service.cache_jamendo_album(ja)
-                        response.albums.append(AlbumResponse(
-                            id=album.id,
-                            external_id=album.external_id,
-                            source=album.source,
-                            name=album.name,
-                            artist_name=album.artist.name if album.artist else None,
-                            cover_url=album.cover_url,
-                            release_date=album.release_date,
-                        ))
-            except Exception as e:
-                logger.warning(f"External album search failed: {e}")
-        
-        for album in local_albums:
-            artist_name = album.artist.name if album.artist else None
-            response.albums.append(AlbumResponse(
-                id=album.id,
-                external_id=album.external_id,
-                source=album.source,
-                name=album.name,
-                artist_name=artist_name,
-                cover_url=album.cover_url,
-                release_date=album.release_date,
-            ))
+            _, _, external_albums = await search_external_sources(db, q, limit)
+            response.albums = external_albums
+        else:
+            for album in local_albums:
+                artist_name = album.artist.name if album.artist else None
+                response.albums.append(AlbumResponse(
+                    id=album.id,
+                    external_id=album.external_id,
+                    source=album.source,
+                    name=album.name,
+                    artist_name=artist_name,
+                    cover_url=album.cover_url,
+                    release_date=album.release_date,
+                ))
     
     response.total = len(response.songs) + len(response.artists) + len(response.albums)
     

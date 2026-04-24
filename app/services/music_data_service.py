@@ -1,18 +1,22 @@
 import json
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Artist, Album, Song, Genre, GraphEdge
 from app.services.jamendo_client import JamendoTrack, JamendoArtist, JamendoAlbum
+from app.services.audiodb_client import AudioDBTrack, AudioDBArtist, AudioDBAlbum
+from app.services.sample_generator import SampleTrack, SampleArtist, SampleAlbum
 
 logger = logging.getLogger(__name__)
 
 
 class MusicDataService:
     SOURCE_JAMENDO = "jamendo"
+    SOURCE_AUDIODB = "audiodb"
+    SOURCE_SAMPLE = "sample"
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -298,3 +302,161 @@ class MusicDataService:
                 self.db.add(edge)
 
         await self.db.commit()
+
+    async def cache_audiodb_track(self, track: AudioDBTrack) -> Song:
+        artist = await self.get_or_create_artist(
+            external_id=track.artist_id,
+            source=self.SOURCE_AUDIODB,
+            name=track.artist_name,
+        )
+
+        album: Optional[Album] = None
+        if track.album_id:
+            album = await self.get_or_create_album(
+                external_id=track.album_id,
+                source=self.SOURCE_AUDIODB,
+                name=track.album_name or "Unknown Album",
+                artist_id=artist.id,
+                cover_url=track.image,
+            )
+
+        song = await self.get_or_create_song(
+            external_id=track.id,
+            source=self.SOURCE_AUDIODB,
+            name=track.name,
+            artist_id=artist.id,
+            album_id=album.id if album else None,
+            duration=track.duration or 180.0,
+            audio_url=track.preview_url,
+            cover_url=track.image,
+            genre_name=track.genre,
+            metadata={
+                "track_id": track.id,
+                "artist_id": track.artist_id,
+                "album_id": track.album_id,
+                "preview_url": track.preview_url,
+            },
+        )
+
+        await self._create_graph_edges(song, artist, album, track.genre)
+
+        return song
+
+    async def cache_audiodb_tracks(self, tracks: list[AudioDBTrack]) -> list[Song]:
+        cached_songs = []
+        for track in tracks:
+            try:
+                song = await self.cache_audiodb_track(track)
+                cached_songs.append(song)
+            except Exception as e:
+                logger.error(f"Failed to cache AudioDB track {track.id}: {e}")
+        return cached_songs
+
+    async def cache_audiodb_artist(self, artist: AudioDBArtist) -> Artist:
+        return await self.get_or_create_artist(
+            external_id=artist.id,
+            source=self.SOURCE_AUDIODB,
+            name=artist.name,
+            bio=artist.bio,
+            image_url=artist.image,
+            metadata={
+                "genre": artist.genre,
+            },
+        )
+
+    async def cache_audiodb_album(self, album: AudioDBAlbum) -> Album:
+        artist = await self.get_or_create_artist(
+            external_id=album.artist_id,
+            source=self.SOURCE_AUDIODB,
+            name=album.artist_name,
+        )
+
+        return await self.get_or_create_album(
+            external_id=album.id,
+            source=self.SOURCE_AUDIODB,
+            name=album.name,
+            artist_id=artist.id,
+            release_date=album.release_date,
+            cover_url=album.image,
+            metadata={
+                "genre": album.genre,
+            },
+        )
+
+    async def cache_sample_track(self, track: SampleTrack) -> Song:
+        artist = await self.get_or_create_artist(
+            external_id=track.artist_id,
+            source=self.SOURCE_SAMPLE,
+            name=track.artist_name,
+        )
+
+        album: Optional[Album] = None
+        if track.album_id:
+            album = await self.get_or_create_album(
+                external_id=track.album_id,
+                source=self.SOURCE_SAMPLE,
+                name=track.album_name or "Unknown Album",
+                artist_id=artist.id,
+                cover_url=track.image,
+            )
+
+        song = await self.get_or_create_song(
+            external_id=track.id,
+            source=self.SOURCE_SAMPLE,
+            name=track.name,
+            artist_id=artist.id,
+            album_id=album.id if album else None,
+            duration=track.duration or 180.0,
+            audio_url=track.audio_url,
+            cover_url=track.image,
+            genre_name=track.genre,
+            metadata={
+                "track_id": track.id,
+                "artist_id": track.artist_id,
+                "album_id": track.album_id,
+            },
+        )
+
+        await self._create_graph_edges(song, artist, album, track.genre)
+
+        return song
+
+    async def cache_sample_tracks(self, tracks: list[SampleTrack]) -> list[Song]:
+        cached_songs = []
+        for track in tracks:
+            try:
+                song = await self.cache_sample_track(track)
+                cached_songs.append(song)
+            except Exception as e:
+                logger.error(f"Failed to cache sample track {track.id}: {e}")
+        return cached_songs
+
+    async def cache_sample_artist(self, artist: SampleArtist) -> Artist:
+        return await self.get_or_create_artist(
+            external_id=artist.id,
+            source=self.SOURCE_SAMPLE,
+            name=artist.name,
+            image_url=artist.image,
+            metadata={
+                "genre": artist.genre,
+            },
+        )
+
+    async def cache_sample_album(self, album: SampleAlbum) -> Album:
+        artist = await self.get_or_create_artist(
+            external_id=album.artist_id,
+            source=self.SOURCE_SAMPLE,
+            name=album.artist_name,
+        )
+
+        return await self.get_or_create_album(
+            external_id=album.id,
+            source=self.SOURCE_SAMPLE,
+            name=album.name,
+            artist_id=artist.id,
+            release_date=album.release_date,
+            cover_url=album.image,
+            metadata={
+                "genre": album.genre,
+            },
+        )

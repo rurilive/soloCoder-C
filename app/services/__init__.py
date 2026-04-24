@@ -4,6 +4,18 @@ from app.services.jamendo_client import (
     JamendoArtist,
     JamendoAlbum,
 )
+from app.services.audiodb_client import (
+    AudioDBClient,
+    AudioDBTrack,
+    AudioDBArtist,
+    AudioDBAlbum,
+)
+from app.services.sample_generator import (
+    SampleDataGenerator,
+    SampleTrack,
+    SampleArtist,
+    SampleAlbum,
+)
 from app.services.music_data_service import MusicDataService
 
 __all__ = [
@@ -11,5 +23,13 @@ __all__ = [
     "JamendoTrack",
     "JamendoArtist",
     "JamendoAlbum",
+    "AudioDBClient",
+    "AudioDBTrack",
+    "AudioDBArtist",
+    "AudioDBAlbum",
+    "SampleDataGenerator",
+    "SampleTrack",
+    "SampleArtist",
+    "SampleAlbum",
     "MusicDataService",
 ]
