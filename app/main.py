@@ -2,7 +2,7 @@ import os
 import uuid
 import math
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, Query
@@ -14,6 +14,7 @@ from PIL import Image
 from jinja2 import Environment, FileSystemLoader
 
 from app.database import get_db, init_db, Photo
+
 
 app = FastAPI(title="简易相册")
 
@@ -28,10 +29,45 @@ templates = Jinja2Templates(directory="templates")
 
 PAGE_SIZE = 12
 
+_vector_store = None
+_embedding_service = None
+_embedding_enabled = False
+
+
+def get_vector_store():
+    global _vector_store
+    if _vector_store is None:
+        from app.vector_store import VectorStore
+        _vector_store = VectorStore()
+    return _vector_store
+
+
+def get_embedding_service():
+    global _embedding_service, _embedding_enabled
+    if _embedding_service is None and _embedding_enabled:
+        try:
+            from app.embedding_service import EmbeddingService
+            _embedding_service = EmbeddingService()
+        except Exception as e:
+            print(f"Embedding service not available: {e}")
+            _embedding_enabled = False
+    return _embedding_service
+
 
 @app.on_event("startup")
 def startup_event():
+    global _embedding_enabled
     init_db()
+    
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    if os.getenv("OPENAI_API_KEY"):
+        _embedding_enabled = True
+        print("Vector search enabled with OpenAI API")
+    else:
+        print("OpenAI API key not found. Vector search is disabled.")
+        print("Please set OPENAI_API_KEY in .env file to enable vector search.")
 
 
 def generate_thumbnail(image_path: str, thumbnail_path: str, size: tuple = (300, 300)):
@@ -91,15 +127,65 @@ def get_pagination_info(total: int, page: int, page_size: int) -> dict:
     }
 
 
-def build_pagination_url(page: int, current_view: str, **kwargs) -> str:
-    if current_view == "search" and kwargs.get("search_query"):
-        return f"/?q={kwargs.get('search_query')}&page={page}"
-    elif current_view == "tag" and kwargs.get("current_tag"):
-        return f"/tag/{kwargs.get('current_tag')}?page={page}"
-    elif current_view == "date" and kwargs.get("current_date"):
-        return f"/date/{kwargs.get('current_date')}?page={page}"
-    else:
-        return f"/?page={page}"
+def add_to_vector_store(
+    photo_id: int,
+    description: str,
+    tags: str,
+) -> bool:
+    global _embedding_enabled
+    if not _embedding_enabled:
+        return False
+    
+    embedding_service = get_embedding_service()
+    if embedding_service is None:
+        return False
+    
+    text_embedding = embedding_service.embed_description(description, tags)
+    
+    if text_embedding:
+        vector_store = get_vector_store()
+        vector_store.add_entry(
+            photo_id=photo_id,
+            text_embedding=text_embedding,
+            description=description,
+            tags=tags,
+        )
+        return True
+    
+    return False
+
+
+def remove_from_vector_store(photo_id: int):
+    global _embedding_enabled
+    if not _embedding_enabled:
+        return
+    
+    try:
+        vector_store = get_vector_store()
+        vector_store.remove_entry(photo_id)
+    except Exception as e:
+        print(f"Error removing from vector store: {e}")
+
+
+def vector_search(
+    query: str,
+    top_k: int = 20,
+) -> List[Tuple[int, float]]:
+    global _embedding_enabled
+    if not _embedding_enabled:
+        return []
+    
+    embedding_service = get_embedding_service()
+    if embedding_service is None:
+        return []
+    
+    query_embedding = embedding_service.embed_text(query)
+    if query_embedding is None:
+        return []
+    
+    vector_store = get_vector_store()
+    results = vector_store.search_combined(query_embedding, top_k=top_k)
+    return results
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -127,6 +213,7 @@ async def index(
     date_groups = get_date_groups(db)
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
+    global _embedding_enabled
     return HTMLResponse(content=render_template(
         "index.html",
         {
@@ -137,6 +224,91 @@ async def index(
             "current_view": "search" if q else "all",
             "search_query": q,
             "pagination": pagination,
+            "vector_search_enabled": _embedding_enabled,
+        },
+    ))
+
+
+@app.get("/vector-search", response_class=HTMLResponse)
+async def vector_search_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: Optional[str] = Query(None, description="向量搜索关键词"),
+    page: int = Query(1, ge=1, description="页码"),
+):
+    global _embedding_enabled
+    
+    tags = get_all_tags(db)
+    date_groups = get_date_groups(db)
+    
+    if not _embedding_enabled:
+        return HTMLResponse(content=render_template(
+            "vector_search.html",
+            {
+                "request": request,
+                "photos": [],
+                "tags": tags,
+                "date_groups": date_groups,
+                "current_view": "vector_search",
+                "search_query": q,
+                "pagination": get_pagination_info(0, 1, PAGE_SIZE),
+                "vector_search_enabled": False,
+                "error_message": "向量搜索未启用。请设置 OPENAI_API_KEY 环境变量。",
+            },
+        ))
+    
+    if not q:
+        return HTMLResponse(content=render_template(
+            "vector_search.html",
+            {
+                "request": request,
+                "photos": [],
+                "tags": tags,
+                "date_groups": date_groups,
+                "current_view": "vector_search",
+                "search_query": q,
+                "pagination": get_pagination_info(0, 1, PAGE_SIZE),
+                "vector_search_enabled": True,
+            },
+        ))
+    
+    search_results = vector_search(q, top_k=100)
+    
+    total = len(search_results)
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    paged_results = search_results[start_idx:end_idx]
+    
+    photo_ids_with_score = {photo_id: score for photo_id, score in paged_results}
+    photos = db.query(Photo).filter(Photo.id.in_(list(photo_ids_with_score.keys()))).all()
+    
+    photos_sorted = sorted(
+        photos,
+        key=lambda p: photo_ids_with_score.get(p.id, 0),
+        reverse=True
+    )
+    
+    photos_with_scores = []
+    for photo in photos_sorted:
+        score = photo_ids_with_score.get(photo.id, 0)
+        photos_with_scores.append({
+            "photo": photo,
+            "similarity": round(score * 100, 1),
+        })
+    
+    pagination = get_pagination_info(total, page, PAGE_SIZE)
+    
+    return HTMLResponse(content=render_template(
+        "vector_search.html",
+        {
+            "request": request,
+            "photos": photos_with_scores,
+            "tags": tags,
+            "date_groups": date_groups,
+            "current_view": "vector_search",
+            "search_query": q,
+            "pagination": pagination,
+            "vector_search_enabled": True,
         },
     ))
 
@@ -160,6 +332,7 @@ async def photos_by_tag(
     date_groups = get_date_groups(db)
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
+    global _embedding_enabled
     return HTMLResponse(content=render_template(
         "index.html",
         {
@@ -170,6 +343,7 @@ async def photos_by_tag(
             "current_view": "tag",
             "current_tag": tag,
             "pagination": pagination,
+            "vector_search_enabled": _embedding_enabled,
         },
     ))
 
@@ -201,6 +375,7 @@ async def photos_by_date(
     date_groups = get_date_groups(db)
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
+    global _embedding_enabled
     return HTMLResponse(content=render_template(
         "index.html",
         {
@@ -211,6 +386,7 @@ async def photos_by_date(
             "current_view": "date",
             "current_date": year_month,
             "pagination": pagination,
+            "vector_search_enabled": _embedding_enabled,
         },
     ))
 
@@ -249,6 +425,13 @@ async def upload_photo(
     )
     db.add(photo)
     db.commit()
+    db.refresh(photo)
+    
+    add_to_vector_store(
+        photo_id=photo.id,
+        description=description.strip(),
+        tags=tags.strip(),
+    )
     
     return RedirectResponse(url="/", status_code=303)
 
@@ -278,6 +461,8 @@ async def delete_photo(photo_id: int, db: Session = Depends(get_db)):
         os.remove(file_path)
     if os.path.exists(thumbnail_path):
         os.remove(thumbnail_path)
+    
+    remove_from_vector_store(photo_id)
     
     db.delete(photo)
     db.commit()
