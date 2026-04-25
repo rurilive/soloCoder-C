@@ -143,33 +143,52 @@ def add_to_vector_store(
     tags: str,
 ) -> bool:
     global _embedding_enabled
-    print(f"[DEBUG add_to_vector_store] photo_id={photo_id}, description='{description}', tags='{tags}'")
+    print(f"\n{'='*60}")
+    print("[DEBUG add_to_vector_store] 开始添加到向量存储")
+    print(f"{'='*60}")
+    print(f"  - photo_id: {photo_id}")
+    print(f"  - description: '{description}'")
+    print(f"  - tags: '{tags}'")
+    print(f"  - _embedding_enabled: {_embedding_enabled}")
     
     if not _embedding_enabled:
-        print("[DEBUG add_to_vector_store] 向量搜索未启用")
+        print("[DEBUG add_to_vector_store] ❌ 向量搜索未启用，跳过")
+        print(f"{'='*60}\n")
         return False
     
+    print(f"[DEBUG add_to_vector_store] 获取 embedding_service...")
     embedding_service = get_embedding_service()
     if embedding_service is None:
-        print("[DEBUG add_to_vector_store] embedding_service 为 None")
+        print("[DEBUG add_to_vector_store] ❌ embedding_service 为 None")
+        print(f"{'='*60}\n")
         return False
     
-    print(f"[DEBUG add_to_vector_store] 开始生成嵌入向量...")
+    print(f"[DEBUG add_to_vector_store] ✅ 获取 embedding_service 成功")
+    print(f"[DEBUG add_to_vector_store] 调用 embed_description...")
+    
     text_embedding = embedding_service.embed_description(description, tags)
     
     if text_embedding:
-        print(f"[DEBUG add_to_vector_store] 成功生成嵌入向量，维度: {len(text_embedding)}")
+        print(f"[DEBUG add_to_vector_store] ✅ 成功生成嵌入向量")
+        print(f"  - 维度: {len(text_embedding)}")
+        print(f"  - 前3个值: {text_embedding[:3]}")
+        
+        print(f"[DEBUG add_to_vector_store] 获取 vector_store...")
         vector_store = get_vector_store()
+        
+        print(f"[DEBUG add_to_vector_store] 调用 vector_store.add_entry...")
         vector_store.add_entry(
             photo_id=photo_id,
             text_embedding=text_embedding,
             description=description,
             tags=tags,
         )
-        print(f"[DEBUG add_to_vector_store] 已保存到向量存储")
+        print(f"[DEBUG add_to_vector_store] ✅ 已保存到向量存储")
+        print(f"{'='*60}\n")
         return True
     else:
-        print(f"[DEBUG add_to_vector_store] 嵌入向量生成失败 (可能是因为 description 和 tags 都为空)")
+        print(f"[DEBUG add_to_vector_store] ❌ 嵌入向量生成失败 (可能是因为 description 和 tags 都为空)")
+        print(f"{'='*60}\n")
     
     return False
 
@@ -191,60 +210,145 @@ def vector_search(
     top_k: int = 20,
 ) -> List[Tuple[int, float]]:
     global _embedding_enabled
-    print(f"\n[DEBUG vector_search] 搜索词: '{query}'")
+    
+    print(f"\n{'='*60}")
+    print("[DEBUG vector_search] ========== 开始向量搜索 ==========")
+    print(f"{'='*60}")
+    print(f"  - 搜索词: '{query}'")
+    print(f"  - top_k: {top_k}")
+    print(f"  - _embedding_enabled: {_embedding_enabled}")
     
     if not _embedding_enabled:
-        print("[DEBUG vector_search] 向量搜索未启用")
+        print("[DEBUG vector_search] ❌ 向量搜索未启用，返回空结果")
+        print(f"{'='*60}\n")
         return []
     
+    print(f"\n[DEBUG vector_search] 步骤1: 获取 embedding_service...")
     embedding_service = get_embedding_service()
     if embedding_service is None:
-        print("[DEBUG vector_search] embedding_service 为 None")
+        print("[DEBUG vector_search] ❌ embedding_service 为 None")
+        print(f"{'='*60}\n")
         return []
+    print("[DEBUG vector_search] ✅ embedding_service 获取成功")
     
-    print(f"[DEBUG vector_search] 生成查询嵌入向量...")
+    print(f"\n[DEBUG vector_search] 步骤2: 生成查询嵌入向量...")
+    print(f"  - 输入文本: '{query}'")
     query_embedding = embedding_service.embed_text(query)
+    
     if query_embedding is None:
-        print("[DEBUG vector_search] 查询嵌入向量生成失败")
+        print("[DEBUG vector_search] ❌ 查询嵌入向量生成失败")
+        print(f"{'='*60}\n")
         return []
     
-    print(f"[DEBUG vector_search] 查询嵌入向量维度: {len(query_embedding)}")
+    print(f"[DEBUG vector_search] ✅ 查询嵌入向量生成成功")
+    print(f"  - 维度: {len(query_embedding)}")
+    print(f"  - 前5个值: {query_embedding[:5]}")
+    print(f"  - 后5个值: {query_embedding[-5:]}")
     
+    print(f"\n[DEBUG vector_search] 步骤3: 获取 vector_store...")
     vector_store = get_vector_store()
+    print("[DEBUG vector_search] ✅ vector_store 获取成功")
     
-    print(f"[DEBUG vector_search] 向量存储中共有 {len(vector_store._entries)} 个条目")
-    print(f"[DEBUG vector_search] 有文本嵌入的条目数: {len(vector_store._text_embeddings)}")
-    print(f"[DEBUG vector_search] 有图像嵌入的条目数: {len(vector_store._image_embeddings)}")
+    print(f"\n[DEBUG vector_search] 步骤4: 检查向量存储内容...")
+    print(f"  - 总条目数: {len(vector_store._entries)}")
+    print(f"  - 文本嵌入数: {len(vector_store._text_embeddings)}")
+    print(f"  - 图像嵌入数: {len(vector_store._image_embeddings)}")
     
+    if len(vector_store._entries) == 0:
+        print("[DEBUG vector_search] ⚠️ 向量存储中没有任何条目！")
+        print("[DEBUG vector_search]   可能的原因:")
+        print("[DEBUG vector_search]   1. 上传照片时没有添加描述/标签")
+        print("[DEBUG vector_search]   2. 上传照片时 OpenAI API 调用失败")
+        print("[DEBUG vector_search]   3. 向量存储文件损坏或未正确保存")
+    
+    print(f"\n[DEBUG vector_search] 所有条目详情:")
     for pid, entry in vector_store._entries.items():
         has_text = pid in vector_store._text_embeddings
         has_image = pid in vector_store._image_embeddings
-        print(f"  - photo_id={pid}: description='{entry.description}', tags='{entry.tags}', text_embedding={has_text}, image_embedding={has_image}")
+        
+        if has_text:
+            emb = vector_store._text_embeddings[pid]
+            emb_info = f"维度={len(emb)}, min={emb.min():.4f}, max={emb.max():.4f}"
+        else:
+            emb_info = "无"
+        
+        print(f"  [{pid}] description='{entry.description}', tags='{entry.tags}'")
+        print(f"       text_embedding={has_text}, image_embedding={has_image}")
+        print(f"       文本嵌入信息: {emb_info}")
     
+    print(f"\n[DEBUG vector_search] 步骤5: 执行搜索...")
     results = vector_store.search_combined(query_embedding, top_k=top_k)
-    print(f"[DEBUG vector_search] 搜索结果数量: {len(results)}")
+    
+    print(f"\n[DEBUG vector_search] 步骤6: 搜索结果汇总:")
+    print(f"  - 结果数量: {len(results)}")
+    
     if results:
-        print(f"[DEBUG vector_search] 前5个结果: {results[:5]}")
+        print(f"\n  完整结果列表:")
+        for i, (pid, score) in enumerate(results):
+            entry = vector_store._entries.get(pid)
+            desc = entry.description if entry else "N/A"
+            tags = entry.tags if entry else "N/A"
+            print(f"    {i+1}. photo_id={pid}, 相似度={score:.6f} ({score*100:.2f}%)")
+            print(f"       description='{desc}', tags='{tags}'")
+    else:
+        print(f"  ⚠️ 没有找到任何匹配的结果")
+        print(f"     可能的原因:")
+        print(f"     1. 没有任何条目有文本/图像嵌入")
+        print(f"     2. 相似度计算结果都为 0")
+    
+    print(f"\n{'='*60}")
+    print("[DEBUG vector_search] ========== 搜索结束 ==========")
+    print(f"{'='*60}\n")
     
     return results
 
 
 def filter_results_by_user(results: List[Tuple[int, float]], db: Session, user_id: int) -> List[Tuple[int, float]]:
-    print(f"\n[DEBUG filter_results_by_user] 用户ID: {user_id}, 输入结果数: {len(results)}")
+    print(f"\n{'='*60}")
+    print("[DEBUG filter_results_by_user] 按用户过滤结果")
+    print(f"{'='*60}")
+    print(f"  - 用户ID: {user_id}")
+    print(f"  - 输入结果数: {len(results)}")
+    
+    if len(results) == 0:
+        print("[DEBUG filter_results_by_user] 输入结果为空，直接返回")
+        print(f"{'='*60}\n")
+        return []
     
     photo_ids = [r[0] for r in results]
+    print(f"  - 搜索到的 photo_ids: {photo_ids}")
+    
+    print(f"\n[DEBUG filter_results_by_user] 查询数据库中属于该用户的照片...")
     user_photos = db.query(Photo).filter(
         Photo.id.in_(photo_ids),
         Photo.user_id == user_id
     ).all()
     
-    print(f"[DEBUG filter_results_by_user] 属于该用户的照片数: {len(user_photos)}")
-    for p in user_photos:
-        print(f"  - photo_id={p.id}, user_id={p.user_id}, description='{p.description}'")
+    print(f"[DEBUG filter_results_by_user] 查询到 {len(user_photos)} 张照片属于该用户")
+    
+    if len(user_photos) > 0:
+        print(f"\n  详情:")
+        for p in user_photos:
+            print(f"    - photo_id={p.id}, user_id={p.user_id}, description='{p.description}'")
+    else:
+        print(f"\n  ⚠️ 没有任何照片属于该用户")
+        print(f"     可能的原因:")
+        print(f"     1. 这些照片属于其他用户")
+        print(f"     2. 照片的 user_id 字段为空")
     
     user_photo_ids = {p.id for p in user_photos}
     filtered = [(photo_id, score) for photo_id, score in results if photo_id in user_photo_ids]
-    print(f"[DEBUG filter_results_by_user] 过滤后结果数: {len(filtered)}")
+    
+    print(f"\n[DEBUG filter_results_by_user] 过滤结果:")
+    print(f"  - 过滤前: {len(results)} 个结果")
+    print(f"  - 过滤后: {len(filtered)} 个结果")
+    
+    if len(filtered) > 0:
+        print(f"\n  过滤后的结果:")
+        for i, (pid, score) in enumerate(filtered):
+            print(f"    {i+1}. photo_id={pid}, 相似度={score:.6f}")
+    
+    print(f"{'='*60}\n")
     
     return filtered
 
