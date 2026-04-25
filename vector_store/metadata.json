@@ -27,6 +27,13 @@
       "image_embedding": null,
       "description": "",
       "tags": "s"
+    },
+    {
+      "photo_id": 7,
+      "text_embedding": null,
+      "image_embedding": null,
+      "description": "头像",
+      "tags": "头像"
     }
   ]
 }

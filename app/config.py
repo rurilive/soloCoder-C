@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 
 
@@ -32,6 +33,22 @@ def get_env_int(key: str, default: int = 0) -> int:
         return default
 
 
+def get_env_log_level(key: str, default: int = logging.DEBUG) -> int:
+    value = os.getenv(key)
+    if value is None:
+        return default
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "WARN": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+        "FATAL": logging.CRITICAL,
+    }
+    return level_map.get(value.upper(), default)
+
+
 class Config:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -45,6 +62,7 @@ class Config:
     PAGE_SIZE = get_env_int("PAGE_SIZE", 12)
     UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
     LOG_DIR = os.getenv("LOG_DIR", "logs")
+    LOG_LEVEL = get_env_log_level("LOG_LEVEL", logging.DEBUG)
     
     INITIAL_TOKEN = os.getenv("INITIAL_TOKEN", "aaaa")
 
