@@ -31,6 +31,53 @@
             padding: 0 1rem;
         }
         
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .user-name {
+            font-size: 0.95rem;
+            color: rgba(255,255,255,0.95);
+            font-weight: 500;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
         .header h1 {
             font-size: 2rem;
             margin-bottom: 0.5rem;
@@ -189,7 +236,28 @@
 <body>
     <div class="header">
         <div class="container">
-            <h1>📸 图片详情</h1>
+            <div class="header-content">
+                <div>
+                    <h1>📸 图片详情</h1>
+                    <p>
+                        {% if current_user and current_user.username %}
+                            欢迎回来，{{ current_user.username }}！
+                        {% endif %}
+                    </p>
+                </div>
+                {% if current_user %}
+                <div class="user-info">
+                    <span class="user-name">
+                        {% if current_user.username %}
+                            👤 {{ current_user.username }}
+                        {% else %}
+                            👤 用户 #{{ current_user.id }}
+                        {% endif %}
+                    </span>
+                    <a href="/logout" class="btn btn-logout btn-sm">退出登录</a>
+                </div>
+                {% endif %}
+            </div>
             <a href="/" class="nav-link">← 返回相册</a>
         </div>
     </div>
@@ -198,7 +266,7 @@
         <div class="photo-detail">
             <div class="photo-image-container">
                 <img 
-                    src="/uploads/{{ photo.filename }}" 
+                    src="/uploads/{{ current_user.id }}/{{ photo.filename }}" 
                     alt="{{ photo.description }}"
                     class="photo-image"
                 >
@@ -238,7 +306,7 @@
                 </div>
                 
                 <div class="actions">
-                    <a href="/uploads/{{ photo.filename }}" class="btn btn-primary" target="_blank">
+                    <a href="/uploads/{{ current_user.id }}/{{ photo.filename }}" class="btn btn-primary" target="_blank">
                         🔍 查看原图
                     </a>
                     <form action="/photo/{{ photo.id }}/delete" method="post" onsubmit="return confirm('确定要删除这张图片吗？')">

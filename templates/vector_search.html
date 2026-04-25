@@ -43,9 +43,38 @@
         .header-content {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             flex-wrap: wrap;
             gap: 1rem;
+        }
+        
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .user-name {
+            font-size: 0.95rem;
+            color: rgba(255,255,255,0.95);
+            font-weight: 500;
+        }
+        
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
         }
         
         .search-form {
@@ -455,18 +484,38 @@
             <div class="header-content">
                 <div>
                     <h1>🔍 向量搜索</h1>
-                    <p>基于语义理解的智能图片搜索</p>
+                    <p>
+                        {% if current_user and current_user.username %}
+                            欢迎回来，{{ current_user.username }}！
+                        {% else %}
+                            基于语义理解的智能图片搜索
+                        {% endif %}
+                    </p>
                     <div class="nav-tabs">
                         <a href="/" class="nav-tab">📷 全部图片</a>
                         <a href="/vector-search" class="nav-tab active">🔍 向量搜索</a>
                     </div>
                 </div>
-                {% if vector_search_enabled %}
-                <form class="search-form" action="/vector-search" method="get">
-                    <input type="text" name="q" placeholder="输入语义描述进行搜索..." value="{{ search_query or '' }}">
-                    <button type="submit">🔍 搜索</button>
-                </form>
-                {% endif %}
+                <div class="header-right">
+                    {% if current_user %}
+                    <div class="user-info">
+                        <span class="user-name">
+                            {% if current_user.username %}
+                                👤 {{ current_user.username }}
+                            {% else %}
+                                👤 用户 #{{ current_user.id }}
+                            {% endif %}
+                        </span>
+                        <a href="/logout" class="btn btn-logout btn-sm">退出登录</a>
+                    </div>
+                    {% endif %}
+                    {% if vector_search_enabled %}
+                    <form class="search-form" action="/vector-search" method="get">
+                        <input type="text" name="q" placeholder="输入语义描述进行搜索..." value="{{ search_query or '' }}">
+                        <button type="submit">🔍 搜索</button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -512,7 +561,7 @@
                             <div class="photo-card">
                                 <a href="/photo/{{ item.photo.id }}">
                                     <img 
-                                        src="/uploads/thumbnails/{{ item.photo.thumbnail_filename }}" 
+                                        src="/uploads/{{ current_user.id }}/thumbnails/{{ item.photo.thumbnail_filename }}" 
                                         alt="{{ item.photo.description }}"
                                         class="photo-card-img"
                                     >

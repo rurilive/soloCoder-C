@@ -13,17 +13,19 @@ from sqlalchemy.orm import Session
 from PIL import Image
 from jinja2 import Environment, FileSystemLoader
 
-from app.database import get_db, init_db, Photo
+from app.database import get_db, init_db, Photo, User, INITIAL_TOKEN
+from app.auth import get_current_user, get_current_user_required, get_token_from_request
 
 
 app = FastAPI(title="简易相册")
 
-os.makedirs("uploads", exist_ok=True)
-os.makedirs("uploads/thumbnails", exist_ok=True)
+BASE_UPLOAD_DIR = "uploads"
+
+os.makedirs(BASE_UPLOAD_DIR, exist_ok=True)
 os.makedirs("static", exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", StaticFiles(directory=BASE_UPLOAD_DIR), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -32,6 +34,14 @@ PAGE_SIZE = 12
 _vector_store = None
 _embedding_service = None
 _embedding_enabled = False
+
+
+def get_user_upload_dir(user_id: int) -> str:
+    user_dir = os.path.join(BASE_UPLOAD_DIR, str(user_id))
+    os.makedirs(user_dir, exist_ok=True)
+    thumbnails_dir = os.path.join(user_dir, "thumbnails")
+    os.makedirs(thumbnails_dir, exist_ok=True)
+    return user_dir
 
 
 def get_vector_store():
@@ -81,8 +91,8 @@ def get_unique_filename(original_filename: str) -> str:
     return f"{uuid.uuid4().hex}{ext}"
 
 
-def get_all_tags(db: Session) -> List[str]:
-    photos = db.query(Photo).all()
+def get_all_tags(db: Session, user_id: int) -> List[str]:
+    photos = db.query(Photo).filter(Photo.user_id == user_id).all()
     tags_set = set()
     for photo in photos:
         for tag in photo.get_tags_list():
@@ -90,8 +100,8 @@ def get_all_tags(db: Session) -> List[str]:
     return sorted(list(tags_set))
 
 
-def get_date_groups(db: Session) -> list:
-    photos = db.query(Photo).order_by(Photo.created_at.desc()).all()
+def get_date_groups(db: Session, user_id: int) -> list:
+    photos = db.query(Photo).filter(Photo.user_id == user_id).order_by(Photo.created_at.desc()).all()
     groups = defaultdict(list)
     for photo in photos:
         date_key = photo.created_at.strftime("%Y-%m")
@@ -188,6 +198,107 @@ def vector_search(
     return results
 
 
+def filter_results_by_user(results: List[Tuple[int, float]], db: Session, user_id: int) -> List[Tuple[int, float]]:
+    photo_ids = [r[0] for r in results]
+    user_photos = db.query(Photo).filter(
+        Photo.id.in_(photo_ids),
+        Photo.user_id == user_id
+    ).all()
+    user_photo_ids = {p.id for p in user_photos}
+    return [(photo_id, score) for photo_id, score in results if photo_id in user_photo_ids]
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_user(request, db)
+    if current_user:
+        return RedirectResponse(url="/", status_code=303)
+    
+    return HTMLResponse(content=render_template(
+        "login.html",
+        {
+            "request": request,
+            "error": None,
+        },
+    ))
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login(
+    request: Request,
+    token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.token == token.strip()).first()
+    
+    if not user:
+        return HTMLResponse(content=render_template(
+            "login.html",
+            {
+                "request": request,
+                "error": "无效的 token，请重试",
+            },
+        ), status_code=401)
+    
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="token", value=user.token, httponly=True, max_age=86400 * 30)
+    return response
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="token")
+    return response
+
+
+@app.get("/create-user", response_class=HTMLResponse)
+async def create_user_page(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_user(request, db)
+    if current_user:
+        return RedirectResponse(url="/", status_code=303)
+    
+    return HTMLResponse(content=render_template(
+        "create_user.html",
+        {
+            "request": request,
+            "error": None,
+        },
+    ))
+
+
+@app.post("/create-user", response_class=HTMLResponse)
+async def create_user(
+    request: Request,
+    username: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    existing_user = db.query(User).filter(User.username == username.strip()).first()
+    if existing_user:
+        return HTMLResponse(content=render_template(
+            "create_user.html",
+            {
+                "request": request,
+                "error": "用户名已存在，请选择其他用户名",
+            },
+        ), status_code=400)
+    
+    new_token = uuid.uuid4().hex
+    user = User(token=new_token, username=username.strip())
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    return HTMLResponse(content=render_template(
+        "create_user_success.html",
+        {
+            "request": request,
+            "username": user.username,
+            "token": user.token,
+        },
+    ))
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request,
@@ -195,7 +306,11 @@ async def index(
     q: Optional[str] = Query(None, description="搜索关键词"),
     page: int = Query(1, ge=1, description="页码"),
 ):
-    query = db.query(Photo)
+    current_user = get_current_user(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    query = db.query(Photo).filter(Photo.user_id == current_user.id)
     
     if q:
         query = query.filter(Photo.description.like(f"%{q}%"))
@@ -209,8 +324,8 @@ async def index(
         .all()
     )
     
-    tags = get_all_tags(db)
-    date_groups = get_date_groups(db)
+    tags = get_all_tags(db, current_user.id)
+    date_groups = get_date_groups(db, current_user.id)
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
     global _embedding_enabled
@@ -218,6 +333,7 @@ async def index(
         "index.html",
         {
             "request": request,
+            "current_user": current_user,
             "photos": photos,
             "tags": tags,
             "date_groups": date_groups,
@@ -236,16 +352,21 @@ async def vector_search_page(
     q: Optional[str] = Query(None, description="向量搜索关键词"),
     page: int = Query(1, ge=1, description="页码"),
 ):
+    current_user = get_current_user(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    
     global _embedding_enabled
     
-    tags = get_all_tags(db)
-    date_groups = get_date_groups(db)
+    tags = get_all_tags(db, current_user.id)
+    date_groups = get_date_groups(db, current_user.id)
     
     if not _embedding_enabled:
         return HTMLResponse(content=render_template(
             "vector_search.html",
             {
                 "request": request,
+                "current_user": current_user,
                 "photos": [],
                 "tags": tags,
                 "date_groups": date_groups,
@@ -262,6 +383,7 @@ async def vector_search_page(
             "vector_search.html",
             {
                 "request": request,
+                "current_user": current_user,
                 "photos": [],
                 "tags": tags,
                 "date_groups": date_groups,
@@ -273,6 +395,7 @@ async def vector_search_page(
         ))
     
     search_results = vector_search(q, top_k=100)
+    search_results = filter_results_by_user(search_results, db, current_user.id)
     
     total = len(search_results)
     start_idx = (page - 1) * PAGE_SIZE
@@ -280,7 +403,10 @@ async def vector_search_page(
     paged_results = search_results[start_idx:end_idx]
     
     photo_ids_with_score = {photo_id: score for photo_id, score in paged_results}
-    photos = db.query(Photo).filter(Photo.id.in_(list(photo_ids_with_score.keys()))).all()
+    photos = db.query(Photo).filter(
+        Photo.id.in_(list(photo_ids_with_score.keys())),
+        Photo.user_id == current_user.id
+    ).all()
     
     photos_sorted = sorted(
         photos,
@@ -302,6 +428,7 @@ async def vector_search_page(
         "vector_search.html",
         {
             "request": request,
+            "current_user": current_user,
             "photos": photos_with_scores,
             "tags": tags,
             "date_groups": date_groups,
@@ -320,7 +447,15 @@ async def photos_by_tag(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="页码"),
 ):
-    photos = db.query(Photo).filter(Photo.tags.like(f"%{tag}%")).order_by(Photo.created_at.desc()).all()
+    current_user = get_current_user(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    photos = db.query(Photo).filter(
+        Photo.user_id == current_user.id,
+        Photo.tags.like(f"%{tag}%")
+    ).order_by(Photo.created_at.desc()).all()
+    
     filtered_photos = [p for p in photos if tag in p.get_tags_list()]
     
     total = len(filtered_photos)
@@ -328,8 +463,8 @@ async def photos_by_tag(
     end_idx = start_idx + PAGE_SIZE
     paged_photos = filtered_photos[start_idx:end_idx]
     
-    tags = get_all_tags(db)
-    date_groups = get_date_groups(db)
+    tags = get_all_tags(db, current_user.id)
+    date_groups = get_date_groups(db, current_user.id)
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
     global _embedding_enabled
@@ -337,6 +472,7 @@ async def photos_by_tag(
         "index.html",
         {
             "request": request,
+            "current_user": current_user,
             "photos": paged_photos,
             "tags": tags,
             "date_groups": date_groups,
@@ -355,12 +491,19 @@ async def photos_by_date(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="页码"),
 ):
+    current_user = get_current_user(request, db)
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    
     try:
         year, month = map(int, year_month.split("-"))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format")
     
-    photos = db.query(Photo).order_by(Photo.created_at.desc()).all()
+    photos = db.query(Photo).filter(
+        Photo.user_id == current_user.id
+    ).order_by(Photo.created_at.desc()).all()
+    
     filtered_photos = [
         p for p in photos 
         if p.created_at.year == year and p.created_at.month == month
@@ -371,8 +514,8 @@ async def photos_by_date(
     end_idx = start_idx + PAGE_SIZE
     paged_photos = filtered_photos[start_idx:end_idx]
     
-    tags = get_all_tags(db)
-    date_groups = get_date_groups(db)
+    tags = get_all_tags(db, current_user.id)
+    date_groups = get_date_groups(db, current_user.id)
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
     global _embedding_enabled
@@ -380,6 +523,7 @@ async def photos_by_date(
         "index.html",
         {
             "request": request,
+            "current_user": current_user,
             "photos": paged_photos,
             "tags": tags,
             "date_groups": date_groups,
@@ -398,14 +542,18 @@ async def upload_photo(
     tags: str = Form(default=""),
     description: str = Form(default=""),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
 ):
     if not file.content_type.startswith("image/"):
         return HTMLResponse("只能上传图片文件", status_code=400)
     
+    user_dir = get_user_upload_dir(current_user.id)
+    thumbnails_dir = os.path.join(user_dir, "thumbnails")
+    
     filename = get_unique_filename(file.filename)
-    file_path = os.path.join("uploads", filename)
+    file_path = os.path.join(user_dir, filename)
     thumbnail_filename = f"thumb_{filename}"
-    thumbnail_path = os.path.join("uploads", "thumbnails", thumbnail_filename)
+    thumbnail_path = os.path.join(thumbnails_dir, thumbnail_filename)
     
     content = await file.read()
     with open(file_path, "wb") as f:
@@ -422,6 +570,7 @@ async def upload_photo(
         thumbnail_filename=thumbnail_filename,
         tags=tags.strip(),
         description=description.strip(),
+        user_id=current_user.id,
     )
     db.add(photo)
     db.commit()
@@ -437,25 +586,43 @@ async def upload_photo(
 
 
 @app.get("/photo/{photo_id}", response_class=HTMLResponse)
-async def photo_detail(photo_id: int, request: Request, db: Session = Depends(get_db)):
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+async def photo_detail(
+    photo_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    photo = db.query(Photo).filter(
+        Photo.id == photo_id,
+        Photo.user_id == current_user.id
+    ).first()
+    
     if not photo:
         raise HTTPException(status_code=404, detail="图片不存在")
     
     return HTMLResponse(content=render_template(
         "detail.html",
-        {"request": request, "photo": photo},
+        {"request": request, "current_user": current_user, "photo": photo},
     ))
 
 
 @app.post("/photo/{photo_id}/delete")
-async def delete_photo(photo_id: int, db: Session = Depends(get_db)):
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+async def delete_photo(
+    photo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    photo = db.query(Photo).filter(
+        Photo.id == photo_id,
+        Photo.user_id == current_user.id
+    ).first()
+    
     if not photo:
         raise HTTPException(status_code=404, detail="图片不存在")
     
-    file_path = os.path.join("uploads", photo.filename)
-    thumbnail_path = os.path.join("uploads", "thumbnails", photo.thumbnail_filename)
+    user_dir = get_user_upload_dir(current_user.id)
+    file_path = os.path.join(user_dir, photo.filename)
+    thumbnail_path = os.path.join(user_dir, "thumbnails", photo.thumbnail_filename)
     
     if os.path.exists(file_path):
         os.remove(file_path)
