@@ -13,15 +13,16 @@ from sqlalchemy.orm import Session
 from PIL import Image
 from jinja2 import Environment, FileSystemLoader
 
-from app.database import get_db, init_db, Photo, User, INITIAL_TOKEN
+from app.database import get_db, init_db, Photo, User
 from app.auth import get_current_user, get_current_user_required, get_token_from_request
 from app.logger import get_logger
+from app.config import config
 
 logger = get_logger()
 
 app = FastAPI(title="简易相册")
 
-BASE_UPLOAD_DIR = "uploads"
+BASE_UPLOAD_DIR = config.UPLOAD_DIR
 
 os.makedirs(BASE_UPLOAD_DIR, exist_ok=True)
 os.makedirs("static", exist_ok=True)
@@ -31,7 +32,7 @@ app.mount("/uploads", StaticFiles(directory=BASE_UPLOAD_DIR), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
 
-PAGE_SIZE = 12
+PAGE_SIZE = config.PAGE_SIZE
 
 _vector_store = None
 _embedding_service = None

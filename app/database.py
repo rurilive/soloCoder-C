@@ -3,6 +3,10 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, F
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import datetime
+from app.config import config
+from app.logger import get_logger
+
+logger = get_logger()
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./photo_album.db"
 
@@ -12,8 +16,6 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
-
-INITIAL_TOKEN = "aaaa"
 
 
 class User(Base):
@@ -54,12 +56,12 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        initial_user = db.query(User).filter(User.token == INITIAL_TOKEN).first()
+        initial_user = db.query(User).filter(User.token == config.INITIAL_TOKEN).first()
         if not initial_user:
-            initial_user = User(token=INITIAL_TOKEN, username="admin")
+            initial_user = User(token=config.INITIAL_TOKEN, username="admin")
             db.add(initial_user)
             db.commit()
-            print(f"Created initial user with token: {INITIAL_TOKEN}")
+            logger.info(f"Created initial user with token: {config.INITIAL_TOKEN}")
     finally:
         db.close()
 

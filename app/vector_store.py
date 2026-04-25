@@ -4,8 +4,25 @@ import numpy as np
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, asdict
 from app.logger import get_logger
+from app.config import config
 
 logger = get_logger()
+
+
+def filter_results_by_threshold(
+    results: List[Tuple[int, float, str]],
+    threshold: float,
+) -> Tuple[List[Tuple[int, float, str]], int]:
+    filtered = []
+    filtered_count = 0
+    
+    for pid, sim, source in results:
+        if sim >= threshold:
+            filtered.append((pid, sim, source))
+        else:
+            filtered_count += 1
+    
+    return filtered, filtered_count
 
 
 @dataclass
@@ -34,6 +51,8 @@ class VectorStore:
         logger.info(f"  - 存储路径: {self.store_path}")
         logger.info(f"  - 元数据文件: {self.metadata_file}")
         logger.info(f"  - 向量文件: {self.vectors_file}")
+        logger.info(f"  - 相似度阈值: {config.VECTOR_SEARCH_SIMILARITY_THRESHOLD}")
+        logger.info(f"  - 最大结果数: {config.VECTOR_SEARCH_TOP_K}")
         
         os.makedirs(store_path, exist_ok=True)
         
@@ -189,6 +208,7 @@ class VectorStore:
         self,
         query_embedding: List[float],
         top_k: int = 10,
+        threshold: Optional[float] = None,
     ) -> List[Tuple[int, float]]:
         logger.debug(f"[VectorStore.search_by_text] 文本向量搜索")
         
@@ -196,17 +216,21 @@ class VectorStore:
         logger.debug(f"  - 查询向量维度: {len(query)}")
         logger.debug(f"  - 候选条目数: {len(self._text_embeddings)}")
         
+        if threshold is None:
+            threshold = config.VECTOR_SEARCH_SIMILARITY_THRESHOLD
+        
+        logger.debug(f"  - 相似度阈值: {threshold}")
+        
         results = []
         
         for photo_id, emb in self._text_embeddings.items():
             sim = self.cosine_similarity(query, emb)
             
-            entry = self._entries.get(photo_id)
-            desc = entry.description if entry else ""
-            
-            logger.debug(f"    [比较] photo_id={photo_id}, similarity={sim:.6f}, desc='{desc[:30] if desc else '空'}...'")
-            
-            results.append((photo_id, sim))
+            if sim >= threshold:
+                entry = self._entries.get(photo_id)
+                desc = entry.description if entry else ""
+                logger.debug(f"    [比较] photo_id={photo_id}, similarity={sim:.6f}, desc='{desc[:30] if desc else '空'}...'")
+                results.append((photo_id, sim))
         
         results.sort(key=lambda x: x[1], reverse=True)
         
@@ -222,6 +246,7 @@ class VectorStore:
         self,
         query_embedding: List[float],
         top_k: int = 10,
+        threshold: Optional[float] = None,
     ) -> List[Tuple[int, float]]:
         logger.debug(f"[VectorStore.search_by_image] 图像向量搜索")
         
@@ -229,12 +254,19 @@ class VectorStore:
         logger.debug(f"  - 查询向量维度: {len(query)}")
         logger.debug(f"  - 候选条目数: {len(self._image_embeddings)}")
         
+        if threshold is None:
+            threshold = config.VECTOR_SEARCH_SIMILARITY_THRESHOLD
+        
+        logger.debug(f"  - 相似度阈值: {threshold}")
+        
         results = []
         
         for photo_id, emb in self._image_embeddings.items():
             sim = self.cosine_similarity(query, emb)
-            logger.debug(f"    [比较] photo_id={photo_id}, similarity={sim:.6f}")
-            results.append((photo_id, sim))
+            
+            if sim >= threshold:
+                logger.debug(f"    [比较] photo_id={photo_id}, similarity={sim:.6f}")
+                results.append((photo_id, sim))
         
         results.sort(key=lambda x: x[1], reverse=True)
         
@@ -248,6 +280,7 @@ class VectorStore:
         self,
         query_embedding: List[float],
         top_k: int = 10,
+        threshold: Optional[float] = None,
     ) -> List[Tuple[int, float]]:
         logger.info(f"\n{'='*60}")
         logger.info(f"[VectorStore.search_combined] 组合向量搜索")
@@ -264,6 +297,11 @@ class VectorStore:
         logger.info(f"  - 文本嵌入数: {len(self._text_embeddings)}")
         logger.info(f"  - 图像嵌入数: {len(self._image_embeddings)}")
         
+        if threshold is None:
+            threshold = config.VECTOR_SEARCH_SIMILARITY_THRESHOLD
+        
+        logger.info(f"  - 配置的相似度阈值: {threshold}")
+        
         if len(self._entries) == 0:
             logger.warning(f"[VectorStore.search_combined] ⚠️ 向量存储中没有任何条目！")
             logger.warning(f"  可能的原因:")
@@ -273,6 +311,7 @@ class VectorStore:
         
         logger.info(f"\n[VectorStore.search_combined] 开始逐一比较:")
         results_with_source = []
+        total_count = 0
         
         for photo_id in self._entries:
             entry = self._entries[photo_id]
@@ -303,16 +342,24 @@ class VectorStore:
             
             logger.info(f"      最大相似度: {max_sim:.6f} (来源: {best_source})")
             
-            if max_sim > 0:
+            total_count += 1
+            if max_sim >= threshold:
+                logger.info(f"      ✅ 满足阈值条件 (>= {threshold})，加入结果")
                 results_with_source.append((photo_id, max_sim, best_source))
+            else:
+                logger.info(f"      ❌ 不满足阈值条件 (< {threshold})，被过滤")
         
         results_with_source.sort(key=lambda x: x[1], reverse=True)
         results = [(r[0], r[1]) for r in results_with_source]
         
+        filtered_count = total_count - len(results)
+        
         logger.info(f"\n{'='*60}")
         logger.info(f"[VectorStore.search_combined] 最终搜索结果")
         logger.info(f"{'='*60}")
-        logger.info(f"  总匹配数: {len(results)}")
+        logger.info(f"  - 总比较数: {total_count}")
+        logger.info(f"  - 通过阈值: {len(results)} (阈值: {threshold})")
+        logger.info(f"  - 被过滤: {filtered_count}")
         
         if len(results) > 0:
             logger.info(f"\n  Top {min(top_k, len(results))} 结果:")
@@ -327,9 +374,9 @@ class VectorStore:
                 logger.info(f"     标签: '{tags}'")
         else:
             logger.warning(f"  ⚠️ 没有找到任何匹配的结果")
-            logger.warning(f"     可能的原因:")
-            logger.warning(f"     1. 没有任何条目有文本/图像嵌入")
-            logger.warning(f"     2. 相似度计算结果都为 0")
+            if filtered_count > 0:
+                logger.warning(f"     所有 {filtered_count} 个候选都被阈值过滤掉了")
+                logger.warning(f"     建议降低 VECTOR_SEARCH_SIMILARITY_THRESHOLD")
         
         logger.info(f"{'='*60}\n")
         
