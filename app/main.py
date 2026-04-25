@@ -143,16 +143,22 @@ def add_to_vector_store(
     tags: str,
 ) -> bool:
     global _embedding_enabled
+    print(f"[DEBUG add_to_vector_store] photo_id={photo_id}, description='{description}', tags='{tags}'")
+    
     if not _embedding_enabled:
+        print("[DEBUG add_to_vector_store] 向量搜索未启用")
         return False
     
     embedding_service = get_embedding_service()
     if embedding_service is None:
+        print("[DEBUG add_to_vector_store] embedding_service 为 None")
         return False
     
+    print(f"[DEBUG add_to_vector_store] 开始生成嵌入向量...")
     text_embedding = embedding_service.embed_description(description, tags)
     
     if text_embedding:
+        print(f"[DEBUG add_to_vector_store] 成功生成嵌入向量，维度: {len(text_embedding)}")
         vector_store = get_vector_store()
         vector_store.add_entry(
             photo_id=photo_id,
@@ -160,7 +166,10 @@ def add_to_vector_store(
             description=description,
             tags=tags,
         )
+        print(f"[DEBUG add_to_vector_store] 已保存到向量存储")
         return True
+    else:
+        print(f"[DEBUG add_to_vector_store] 嵌入向量生成失败 (可能是因为 description 和 tags 都为空)")
     
     return False
 
@@ -182,30 +191,62 @@ def vector_search(
     top_k: int = 20,
 ) -> List[Tuple[int, float]]:
     global _embedding_enabled
+    print(f"\n[DEBUG vector_search] 搜索词: '{query}'")
+    
     if not _embedding_enabled:
+        print("[DEBUG vector_search] 向量搜索未启用")
         return []
     
     embedding_service = get_embedding_service()
     if embedding_service is None:
+        print("[DEBUG vector_search] embedding_service 为 None")
         return []
     
+    print(f"[DEBUG vector_search] 生成查询嵌入向量...")
     query_embedding = embedding_service.embed_text(query)
     if query_embedding is None:
+        print("[DEBUG vector_search] 查询嵌入向量生成失败")
         return []
     
+    print(f"[DEBUG vector_search] 查询嵌入向量维度: {len(query_embedding)}")
+    
     vector_store = get_vector_store()
+    
+    print(f"[DEBUG vector_search] 向量存储中共有 {len(vector_store._entries)} 个条目")
+    print(f"[DEBUG vector_search] 有文本嵌入的条目数: {len(vector_store._text_embeddings)}")
+    print(f"[DEBUG vector_search] 有图像嵌入的条目数: {len(vector_store._image_embeddings)}")
+    
+    for pid, entry in vector_store._entries.items():
+        has_text = pid in vector_store._text_embeddings
+        has_image = pid in vector_store._image_embeddings
+        print(f"  - photo_id={pid}: description='{entry.description}', tags='{entry.tags}', text_embedding={has_text}, image_embedding={has_image}")
+    
     results = vector_store.search_combined(query_embedding, top_k=top_k)
+    print(f"[DEBUG vector_search] 搜索结果数量: {len(results)}")
+    if results:
+        print(f"[DEBUG vector_search] 前5个结果: {results[:5]}")
+    
     return results
 
 
 def filter_results_by_user(results: List[Tuple[int, float]], db: Session, user_id: int) -> List[Tuple[int, float]]:
+    print(f"\n[DEBUG filter_results_by_user] 用户ID: {user_id}, 输入结果数: {len(results)}")
+    
     photo_ids = [r[0] for r in results]
     user_photos = db.query(Photo).filter(
         Photo.id.in_(photo_ids),
         Photo.user_id == user_id
     ).all()
+    
+    print(f"[DEBUG filter_results_by_user] 属于该用户的照片数: {len(user_photos)}")
+    for p in user_photos:
+        print(f"  - photo_id={p.id}, user_id={p.user_id}, description='{p.description}'")
+    
     user_photo_ids = {p.id for p in user_photos}
-    return [(photo_id, score) for photo_id, score in results if photo_id in user_photo_ids]
+    filtered = [(photo_id, score) for photo_id, score in results if photo_id in user_photo_ids]
+    print(f"[DEBUG filter_results_by_user] 过滤后结果数: {len(filtered)}")
+    
+    return filtered
 
 
 @app.get("/login", response_class=HTMLResponse)
