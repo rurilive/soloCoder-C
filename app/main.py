@@ -193,14 +193,39 @@ def add_to_vector_store(
 
 def remove_from_vector_store(photo_id: int):
     global _embedding_enabled
+    
+    logger.info(f"\n{'='*60}")
+    logger.info(f"[remove_from_vector_store] 从向量存储中删除条目")
+    logger.info(f"{'='*60}")
+    logger.info(f"  - photo_id: {photo_id}")
+    logger.info(f"  - _embedding_enabled: {_embedding_enabled}")
+    
     if not _embedding_enabled:
+        logger.warning(f"[remove_from_vector_store] ⚠️ 向量搜索未启用，跳过删除")
         return
     
     try:
+        logger.debug(f"[remove_from_vector_store] 获取 vector_store...")
         vector_store = get_vector_store()
+        
+        entry = vector_store.get_entry(photo_id)
+        if entry:
+            logger.info(f"  - 找到条目: description='{entry.description}', tags='{entry.tags}'")
+        
+        has_text = vector_store.has_text_embedding(photo_id)
+        has_image = vector_store.has_image_embedding(photo_id)
+        logger.info(f"  - 文本嵌入: {'有' if has_text else '无'}")
+        logger.info(f"  - 图像嵌入: {'有' if has_image else '无'}")
+        
         vector_store.remove_entry(photo_id)
+        logger.info(f"[remove_from_vector_store] ✅ 已从向量存储中删除 photo_id={photo_id}")
+        logger.info(f"{'='*60}\n")
+        
     except Exception as e:
-        logger.error(f"Error removing from vector store: {e}")
+        logger.error(f"[remove_from_vector_store] ❌ 从向量存储删除时出错: {e}")
+        logger.error(f"  - 错误类型: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
 
 
 def vector_search(

@@ -274,3 +274,10 @@
 2026-04-25 23:30:28 - DEBUG -   - 向量数: 5
 2026-04-25 23:30:28 - INFO - [VectorStore.add_entry] ✅ 已保存到向量存储
 2026-04-25 23:30:28 - INFO - [add_to_vector_store] ✅ 已保存到向量存储
+2026-04-25 23:34:02 - INFO - Vector search enabled with OpenAI API
+2026-04-25 23:34:13 - INFO - Vector search enabled with OpenAI API
+2026-04-25 23:34:54 - INFO - Vector search enabled with OpenAI API
+2026-04-25 23:35:19 - INFO - Vector search enabled with OpenAI API
+2026-04-25 23:36:27 - INFO - Vector search enabled with OpenAI API
+2026-04-25 23:36:39 - INFO - Vector search enabled with OpenAI API
+2026-04-25 23:39:52 - INFO - Vector search enabled with OpenAI API
