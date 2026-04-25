@@ -13,7 +13,13 @@ class EmbeddingService:
         if not api_key:
             raise ValueError("OPENAI_API_KEY is not set. Please set it in .env file or environment variable.")
         
-        self.client = OpenAI(api_key=api_key)
+        base_url = os.getenv("OPENAI_BASE_URL")
+        
+        client_kwargs = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        
+        self.client = OpenAI(**client_kwargs)
         self.model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
         self.dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
     
