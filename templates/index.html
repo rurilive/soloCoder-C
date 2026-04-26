@@ -553,6 +553,15 @@
                 <h2 class="section-title">
                     {% if current_view == 'search' %}
                         🔍 搜索结果: "{{ search_query }}"
+                        {% if search_type == 'vector' %}
+                            <span style="font-size: 0.8rem; color: #667eea; margin-left: 0.5rem;">
+                                (向量语义搜索)
+                            </span>
+                        {% elif search_type == 'exact' %}
+                            <span style="font-size: 0.8rem; color: #667eea; margin-left: 0.5rem;">
+                                (精确匹配)
+                            </span>
+                        {% endif %}
                     {% elif current_view == 'tag' %}
                         🏷️ 标签: {{ current_tag }}
                     {% elif current_view == 'date' %}
@@ -562,37 +571,83 @@
                     {% endif %}
                 </h2>
                 
-                {% if photos %}
+                {% if search_type == 'vector' and photos_with_scores %}
+                    <div class="current-filter" style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border: 1px solid #667eea30;">
+                        <span>
+                            💡 精确匹配未找到结果，已自动使用向量语义搜索
+                        </span>
+                    </div>
+                {% endif %}
+                
+                {% if photos or photos_with_scores %}
                     <div class="photo-grid">
-                        {% for photo in photos %}
-                            <div class="photo-card">
-                                <a href="/photo/{{ photo.id }}">
-                                    <img 
-                                        src="/uploads/{{ current_user.id }}/thumbnails/{{ photo.thumbnail_filename }}" 
-                                        alt="{{ photo.description }}"
-                                        class="photo-card-img"
-                                    >
-                                </a>
-                                <div class="photo-card-info">
-                                    <div class="photo-card-date">
-                                        {{ photo.created_at.strftime('%Y-%m-%d %H:%M') }}
-                                    </div>
-                                    {% if photo.get_tags_list() %}
-                                        <div class="photo-card-tags">
-                                            {% for tag in photo.get_tags_list() %}
-                                                <a href="/tag/{{ tag }}" class="tag">{{ tag }}</a>
-                                            {% endfor %}
+                        {% if photos_with_scores %}
+                            {% for item in photos_with_scores %}
+                                {% set photo = item.photo %}
+                                <div class="photo-card">
+                                    <a href="/photo/{{ photo.id }}">
+                                        <img 
+                                            src="/uploads/{{ current_user.id }}/thumbnails/{{ photo.thumbnail_filename }}" 
+                                            alt="{{ photo.description }}"
+                                            class="photo-card-img"
+                                        >
+                                    </a>
+                                    <div class="photo-card-info">
+                                        <div class="photo-card-date">
+                                            {{ photo.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                            {% if item.similarity %}
+                                                <span style="color: #667eea; font-weight: 500; margin-left: 0.5rem;">
+                                                    相似度: {{ item.similarity }}%
+                                                </span>
+                                            {% endif %}
                                         </div>
-                                    {% endif %}
-                                    <div class="photo-card-actions">
-                                        <a href="/photo/{{ photo.id }}" class="btn btn-sm btn-primary">查看</a>
-                                        <form action="/photo/{{ photo.id }}/delete" method="post" onsubmit="return confirm('确定要删除这张图片吗？')">
-                                            <button type="submit" class="btn btn-sm btn-danger">删除</button>
-                                        </form>
+                                        {% if photo.get_tags_list() %}
+                                            <div class="photo-card-tags">
+                                                {% for tag in photo.get_tags_list() %}
+                                                    <a href="/tag/{{ tag }}" class="tag">{{ tag }}</a>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                        <div class="photo-card-actions">
+                                            <a href="/photo/{{ photo.id }}" class="btn btn-sm btn-primary">查看</a>
+                                            <form action="/photo/{{ photo.id }}/delete" method="post" onsubmit="return confirm('确定要删除这张图片吗？')">
+                                                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                                            </form>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        {% endfor %}
+                            {% endfor %}
+                        {% else %}
+                            {% for photo in photos %}
+                                <div class="photo-card">
+                                    <a href="/photo/{{ photo.id }}">
+                                        <img 
+                                            src="/uploads/{{ current_user.id }}/thumbnails/{{ photo.thumbnail_filename }}" 
+                                            alt="{{ photo.description }}"
+                                            class="photo-card-img"
+                                        >
+                                    </a>
+                                    <div class="photo-card-info">
+                                        <div class="photo-card-date">
+                                            {{ photo.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        </div>
+                                        {% if photo.get_tags_list() %}
+                                            <div class="photo-card-tags">
+                                                {% for tag in photo.get_tags_list() %}
+                                                    <a href="/tag/{{ tag }}" class="tag">{{ tag }}</a>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                        <div class="photo-card-actions">
+                                            <a href="/photo/{{ photo.id }}" class="btn btn-sm btn-primary">查看</a>
+                                            <form action="/photo/{{ photo.id }}/delete" method="post" onsubmit="return confirm('确定要删除这张图片吗？')">
+                                                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
                     </div>
                     
                     {% if pagination.total_pages > 1 %}
@@ -649,7 +704,25 @@
                         <p>暂无图片</p>
                         <p>
                             {% if current_view == 'search' %}
-                                没有找到匹配的图片，请尝试其他关键词
+                                {% if search_type == 'vector' %}
+                                    精确匹配和向量语义搜索都没有找到结果
+                                    <br>
+                                    <small style="color: #999;">
+                                        请尝试其他关键词，或检查图片是否有描述标签
+                                    </small>
+                                {% elif vector_search_enabled %}
+                                    精确匹配没有找到结果
+                                    <br>
+                                    <small style="color: #999;">
+                                        已自动尝试向量语义搜索，也未找到结果
+                                    </small>
+                                {% else %}
+                                    没有找到匹配的图片，请尝试其他关键词
+                                    <br>
+                                    <small style="color: #999;">
+                                        提示：设置 OPENAI_API_KEY 可启用向量语义搜索
+                                    </small>
+                                {% endif %}
                             {% else %}
                                 开始上传您的第一张图片吧！
                             {% endif %}

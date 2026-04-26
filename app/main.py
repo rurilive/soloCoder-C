@@ -474,35 +474,115 @@ async def index(
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
     
-    query = db.query(Photo).filter(Photo.user_id == current_user.id)
-    
-    if q:
-        query = query.filter(Photo.description.like(f"%{q}%"))
-    
-    total = query.count()
-    
-    photos = (
-        query.order_by(Photo.created_at.desc())
-        .offset((page - 1) * PAGE_SIZE)
-        .limit(PAGE_SIZE)
-        .all()
-    )
+    global _embedding_enabled
     
     tags = get_all_tags(db, current_user.id)
     date_groups = get_date_groups(db, current_user.id)
+    
+    search_type = None
+    photos = []
+    total = 0
+    photos_with_scores = None
+    
+    if q:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"[首页搜索] 开始搜索: '{q}'")
+        logger.info(f"{'='*60}")
+        
+        logger.info(f"[首页搜索] 步骤1: 尝试精确匹配 (LIKE 查询)...")
+        query = db.query(Photo).filter(
+            Photo.user_id == current_user.id,
+            Photo.description.like(f"%{q}%")
+        )
+        like_total = query.count()
+        
+        if like_total > 0:
+            logger.info(f"[首页搜索] ✅ 精确匹配找到 {like_total} 个结果")
+            search_type = "exact"
+            
+            total = like_total
+            photos = (
+                query.order_by(Photo.created_at.desc())
+                .offset((page - 1) * PAGE_SIZE)
+                .limit(PAGE_SIZE)
+                .all()
+            )
+        else:
+            logger.info(f"[首页搜索] ⚠️ 精确匹配没有找到结果")
+            
+            if _embedding_enabled:
+                logger.info(f"\n[首页搜索] 步骤2: 尝试向量语义搜索...")
+                search_type = "vector"
+                
+                search_results = vector_search(q, top_k=100)
+                search_results = filter_results_by_user(search_results, db, current_user.id)
+                
+                total = len(search_results)
+                
+                if total > 0:
+                    logger.info(f"[首页搜索] ✅ 向量搜索找到 {total} 个结果")
+                    
+                    start_idx = (page - 1) * PAGE_SIZE
+                    end_idx = start_idx + PAGE_SIZE
+                    paged_results = search_results[start_idx:end_idx]
+                    
+                    photo_ids_with_score = {photo_id: score for photo_id, score in paged_results}
+                    photos_query = db.query(Photo).filter(
+                        Photo.id.in_(list(photo_ids_with_score.keys())),
+                        Photo.user_id == current_user.id
+                    ).all()
+                    
+                    photos_sorted = sorted(
+                        photos_query,
+                        key=lambda p: photo_ids_with_score.get(p.id, 0),
+                        reverse=True
+                    )
+                    
+                    photos_with_scores = []
+                    for photo in photos_sorted:
+                        score = photo_ids_with_score.get(photo.id, 0)
+                        photos_with_scores.append({
+                            "photo": photo,
+                            "similarity": round(score * 100, 1),
+                        })
+                else:
+                    logger.info(f"[首页搜索] ⚠️ 向量搜索也没有找到结果")
+                    photos = []
+                    photos_with_scores = []
+            else:
+                logger.info(f"[首页搜索] ⚠️ 向量搜索未启用，且精确匹配无结果")
+                search_type = "exact"
+                photos = []
+    else:
+        query = db.query(Photo).filter(Photo.user_id == current_user.id)
+        total = query.count()
+        photos = (
+            query.order_by(Photo.created_at.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+    
     pagination = get_pagination_info(total, page, PAGE_SIZE)
     
-    global _embedding_enabled
+    logger.info(f"\n[首页搜索] 搜索完成:")
+    logger.info(f"  - 搜索关键词: '{q}'")
+    logger.info(f"  - 搜索类型: {search_type or '浏览全部'}")
+    logger.info(f"  - 总结果数: {total}")
+    logger.info(f"{'='*60}\n")
+    
     return HTMLResponse(content=render_template(
         "index.html",
         {
             "request": request,
             "current_user": current_user,
             "photos": photos,
+            "photos_with_scores": photos_with_scores,
             "tags": tags,
             "date_groups": date_groups,
             "current_view": "search" if q else "all",
             "search_query": q,
+            "search_type": search_type,
             "pagination": pagination,
             "vector_search_enabled": _embedding_enabled,
         },
