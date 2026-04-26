@@ -603,6 +603,32 @@
             color: #666;
             margin-bottom: 1.5rem;
         }
+        
+        .copy-btn {
+            position: relative;
+        }
+        
+        .copy-btn.copied::after {
+            content: "已复制!";
+            position: absolute;
+            top: -35px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #27ae60;
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            animation: fadeInOut 1.5s ease-in-out;
+        }
+        
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            20% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+        }
     </style>
 </head>
 <body>
@@ -686,6 +712,9 @@
                 </div>
                 <div class="album-actions">
                     <a href="/albums" class="btn btn-secondary btn-sm">← 返回相册列表</a>
+                    {% if album.is_public %}
+                    <button type="button" class="btn btn-secondary btn-sm copy-btn" onclick="copyAlbumLink()">🔗 复制链接</button>
+                    {% endif %}
                     {% if is_owner %}
                     <a href="/album/{{ album.id }}/edit" class="btn btn-primary btn-sm">✏️ 编辑相册</a>
                     {% endif %}
@@ -966,5 +995,30 @@
             {% endif %}
         </div>
     </div>
+    <script>
+        function copyAlbumLink() {
+            const url = window.location.href;
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                }, 1500);
+            }).catch(err => {
+                const textArea = document.createElement('textarea');
+                textArea.value = url;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                const btn = document.querySelector('.copy-btn');
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                }, 1500);
+            });
+        }
+    </script>
 </body>
 </html>

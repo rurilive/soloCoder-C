@@ -932,15 +932,26 @@ async def photo_detail(
     photo_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required),
 ):
-    photo = db.query(Photo).filter(
-        Photo.id == photo_id,
-        Photo.user_id == current_user.id
-    ).first()
+    current_user = get_current_user(request, db)
+    
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
     
     if not photo:
         raise HTTPException(status_code=404, detail="图片不存在")
+    
+    can_view = False
+    if current_user and photo.user_id == current_user.id:
+        can_view = True
+    elif photo.album:
+        if photo.album.can_view(current_user.id if current_user else None):
+            can_view = True
+    
+    if not can_view:
+        if current_user:
+            raise HTTPException(status_code=403, detail="您没有权限访问这张图片")
+        else:
+            return RedirectResponse(url="/login", status_code=303)
     
     return HTMLResponse(content=render_template(
         "detail.html",
