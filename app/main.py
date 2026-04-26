@@ -983,32 +983,36 @@ async def delete_photo(
 async def albums_list(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required),
 ):
-    albums = get_user_albums(db, current_user.id)
+    current_user = get_current_user(request, db)
     
     album_info = []
-    for album in albums:
-        photo_count = db.query(Photo).filter(Photo.album_id == album.id).count()
-        is_owner = album.is_owner(current_user.id)
+    if current_user:
+        albums = get_user_albums(db, current_user.id)
         
-        member_role = None
-        for member in album.members:
-            if member.user_id == current_user.id:
-                member_role = member.role
-                break
+        for album in albums:
+            photo_count = db.query(Photo).filter(Photo.album_id == album.id).count()
+            is_owner = album.is_owner(current_user.id)
+            
+            member_role = None
+            for member in album.members:
+                if member.user_id == current_user.id:
+                    member_role = member.role
+                    break
+            
+            album_info.append({
+                "album": album,
+                "photo_count": photo_count,
+                "is_owner": is_owner,
+                "member_role": member_role,
+            })
         
-        album_info.append({
-            "album": album,
-            "photo_count": photo_count,
-            "is_owner": is_owner,
-            "member_role": member_role,
-        })
-    
-    public_albums = db.query(Album).filter(
-        Album.is_public == True,
-        Album.owner_id != current_user.id
-    ).all()
+        public_albums = db.query(Album).filter(
+            Album.is_public == True,
+            Album.owner_id != current_user.id
+        ).all()
+    else:
+        public_albums = db.query(Album).filter(Album.is_public == True).all()
     
     public_album_info = []
     for album in public_albums:

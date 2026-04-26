@@ -360,6 +360,7 @@
     </div>
     
     <div class="main-content">
+        {% if current_user %}
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
             <h2 class="section-title">📁 我的相册</h2>
             <a href="/album/create" class="btn btn-primary">+ 创建新相册</a>
@@ -463,6 +464,58 @@
                 </div>
             {% endfor %}
         </div>
+        {% endif %}
+        
+        {% else %}
+        <div style="margin-bottom: 1.5rem;">
+            <h2 class="section-title">🌐 公开相册</h2>
+            <p style="color: #666; margin-top: 0.5rem;">
+                浏览公开相册，查看他人分享的精彩照片。
+                <a href="/login" style="color: #667eea;">登录</a> 后可以创建自己的相册。
+            </p>
+        </div>
+        
+        {% if public_album_info %}
+        <div class="album-grid">
+            {% for info in public_album_info %}
+                {% set album = info.album %}
+                <div class="album-card">
+                    <div class="album-card-header">
+                        <div class="album-card-icon">🌐</div>
+                        <span class="album-card-badge badge-public">公开</span>
+                    </div>
+                    <div class="album-card-body">
+                        <a href="/album/{{ album.id }}" class="album-card-title">{{ album.name }}</a>
+                        {% if album.description %}
+                        <p class="album-card-description">{{ album.description }}</p>
+                        {% endif %}
+                        <div class="album-card-meta">
+                            <span>{% if album.created_at %}{{ album.created_at.strftime('%Y-%m-%d') }} 创建{% else %}未知日期{% endif %}</span>
+                            <span>{{ info.photo_count }} 张照片</span>
+                        </div>
+                        <p class="public-album-owner">
+                            👤 所有者: {{ info.owner_username }}
+                        </p>
+                        <div class="album-card-actions">
+                            <a href="/album/{{ album.id }}" class="btn btn-secondary btn-sm">查看</a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
+            <p>暂无公开相册</p>
+            <p style="color: #666; font-size: 0.9rem;">
+                <a href="/login" style="color: #667eea;">登录</a> 后可以创建并分享自己的相册
+            </p>
+        </div>
+        {% endif %}
         {% endif %}
     </div>
 </body>
