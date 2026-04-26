@@ -998,26 +998,43 @@
     <script>
         function copyAlbumLink() {
             const url = window.location.href;
-            navigator.clipboard.writeText(url).then(() => {
-                const btn = document.querySelector('.copy-btn');
-                btn.classList.add('copied');
-                setTimeout(() => {
-                    btn.classList.remove('copied');
-                }, 1500);
-            }).catch(err => {
+            const btn = document.querySelector('.copy-btn');
+            
+            try {
                 const textArea = document.createElement('textarea');
                 textArea.value = url;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                textArea.style.top = '-9999px';
                 document.body.appendChild(textArea);
                 textArea.select();
-                document.execCommand('copy');
+                const success = document.execCommand('copy');
                 document.body.removeChild(textArea);
                 
-                const btn = document.querySelector('.copy-btn');
-                btn.classList.add('copied');
-                setTimeout(() => {
-                    btn.classList.remove('copied');
-                }, 1500);
-            });
+                if (success) {
+                    showCopiedFeedback(btn);
+                    return;
+                }
+            } catch (e) {
+            }
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(() => {
+                    showCopiedFeedback(btn);
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    alert('复制失败，请手动复制链接：' + url);
+                });
+            } else {
+                alert('您的浏览器不支持自动复制，请手动复制链接：' + url);
+            }
+        }
+        
+        function showCopiedFeedback(btn) {
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.classList.remove('copied');
+            }, 1500);
         }
     </script>
 </body>

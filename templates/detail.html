@@ -266,7 +266,7 @@
         <div class="photo-detail">
             <div class="photo-image-container">
                 <img 
-                    src="/uploads/{{ current_user.id }}/{{ photo.filename }}" 
+                    src="/uploads/{{ photo.user_id }}/{{ photo.filename }}" 
                     alt="{{ photo.description }}"
                     class="photo-image"
                 >
@@ -306,7 +306,7 @@
                 </div>
                 
                 <div class="actions">
-                    <a href="/uploads/{{ current_user.id }}/{{ photo.filename }}" class="btn btn-primary" target="_blank">
+                    <a href="/uploads/{{ photo.user_id }}/{{ photo.filename }}" class="btn btn-primary" target="_blank">
                         🔍 查看原图
                     </a>
                     <form action="/photo/{{ photo.id }}/delete" method="post" onsubmit="return confirm('确定要删除这张图片吗？')">
