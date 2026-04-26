@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的相册 - 简易相册</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .user-name {
+            font-size: 0.95rem;
+            color: rgba(255,255,255,0.95);
+            font-weight: 500;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+        
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #f0f0ff;
+            color: #667eea;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0ff;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+        
+        .nav-tab {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            color: rgba(255,255,255,0.8);
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        .nav-tab:hover {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+        
+        .nav-tab.active {
+            background: rgba(255,255,255,0.3);
+            color: white;
+            font-weight: 500;
+        }
+        
+        .main-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+            display: inline-block;
+        }
+        
+        .album-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        @media (max-width: 600px) {
+            .album-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .album-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+        
+        .album-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .album-card-header {
+            height: 160px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .album-card-icon {
+            font-size: 4rem;
+            opacity: 0.5;
+        }
+        
+        .album-card-badge {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-public {
+            background: rgba(46, 204, 113, 0.9);
+            color: white;
+        }
+        
+        .badge-shared {
+            background: rgba(52, 152, 219, 0.9);
+            color: white;
+        }
+        
+        .badge-owner {
+            background: rgba(241, 196, 15, 0.9);
+            color: white;
+        }
+        
+        .album-card-body {
+            padding: 1rem;
+        }
+        
+        .album-card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+            text-decoration: none;
+        }
+        
+        .album-card-title:hover {
+            color: #667eea;
+        }
+        
+        .album-card-description {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+        
+        .album-card-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #999;
+            margin-bottom: 0.75rem;
+        }
+        
+        .album-card-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .create-album-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 280px;
+            border: 2px dashed #ddd;
+            cursor: pointer;
+        }
+        
+        .create-album-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .create-album-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .create-album-text {
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .section-divider {
+            margin: 2rem 0;
+            border-top: 1px solid #eee;
+        }
+        
+        .public-album-owner {
+            font-size: 0.85rem;
+            color: #999;
+            margin-top: 0.25rem;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: white;
+            border-radius: 12px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="header-content">
+                <div>
+                    <h1>📸 简易相册</h1>
+                    <p>
+                        {% if current_user and current_user.username %}
+                            欢迎回来，{{ current_user.username }}！
+                        {% else %}
+                            上传、管理、浏览您的精彩瞬间
+                        {% endif %}
+                    </p>
+                    <div class="nav-tabs">
+                        <a href="/" class="nav-tab">📷 全部图片</a>
+                        <a href="/albums" class="nav-tab active">📁 相册管理</a>
+                        {% if vector_search_enabled %}
+                        <a href="/vector-search" class="nav-tab">🔍 向量搜索</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="header-right">
+                    {% if current_user %}
+                    <div class="user-info">
+                        <span class="user-name">
+                            {% if current_user.username %}
+                                👤 {{ current_user.username }}
+                            {% else %}
+                                👤 用户 #{{ current_user.id }}
+                            {% endif %}
+                        </span>
+                        <a href="/logout" class="btn btn-logout btn-sm">退出登录</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <h2 class="section-title">📁 我的相册</h2>
+            <a href="/album/create" class="btn btn-primary">+ 创建新相册</a>
+        </div>
+        
+        {% if album_info %}
+            <div class="album-grid">
+                <a href="/album/create" class="create-album-card" style="text-decoration: none; color: inherit;">
+                    <div class="create-album-icon">➕</div>
+                    <div class="create-album-text">创建新相册</div>
+                </a>
+                
+                {% for info in album_info %}
+                    {% set album = info.album %}
+                    <div class="album-card">
+                        <div class="album-card-header">
+                            <div class="album-card-icon">📁</div>
+                            {% if album.is_public %}
+                            <span class="album-card-badge badge-public">公开</span>
+                            {% endif %}
+                            {% if info.member_role and not info.is_owner %}
+                            <span class="album-card-badge badge-shared">
+                                {% if info.member_role == 'editor' %}
+                                    编辑者
+                                {% else %}
+                                    查看者
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                            {% if info.is_owner %}
+                            <span class="album-card-badge badge-owner">所有者</span>
+                            {% endif %}
+                        </div>
+                        <div class="album-card-body">
+                            <a href="/album/{{ album.id }}" class="album-card-title">{{ album.name }}</a>
+                            {% if album.description %}
+                            <p class="album-card-description">{{ album.description }}</p>
+                            {% endif %}
+                            <div class="album-card-meta">
+                                <span>{{ album.created_at.strftime('%Y-%m-%d') }} 创建</span>
+                                <span>{{ info.photo_count }} 张照片</span>
+                            </div>
+                            <div class="album-card-actions">
+                                <a href="/album/{{ album.id }}" class="btn btn-secondary btn-sm">查看</a>
+                                {% if info.is_owner or info.member_role == 'editor' %}
+                                <a href="/album/{{ album.id }}/edit" class="btn btn-primary btn-sm">编辑</a>
+                                {% endif %}
+                                {% if info.is_owner and album.name != '默认相册' %}
+                                <form action="/album/{{ album.id }}/delete" method="post" onsubmit="return confirm('确定要删除这个相册吗？相册内的所有照片也将被删除！')">
+                                    <button type="submit" class="btn btn-danger btn-sm">删除</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <path d="M16 10a4 4 0 0 1-8 0"/>
+                </svg>
+                <p>您还没有相册</p>
+                <p>
+                    <a href="/album/create" class="btn btn-primary" style="margin-top: 1rem;">创建第一个相册</a>
+                </p>
+            </div>
+        {% endif %}
+        
+        {% if public_album_info %}
+        <div class="section-divider"></div>
+        
+        <h2 class="section-title">🌐 公开相册</h2>
+        
+        <div class="album-grid">
+            {% for info in public_album_info %}
+                {% set album = info.album %}
+                <div class="album-card">
+                    <div class="album-card-header">
+                        <div class="album-card-icon">🌐</div>
+                        <span class="album-card-badge badge-public">公开</span>
+                    </div>
+                    <div class="album-card-body">
+                        <a href="/album/{{ album.id }}" class="album-card-title">{{ album.name }}</a>
+                        {% if album.description %}
+                        <p class="album-card-description">{{ album.description }}</p>
+                        {% endif %}
+                        <div class="album-card-meta">
+                            <span>{{ album.created_at.strftime('%Y-%m-%d') }} 创建</span>
+                            <span>{{ info.photo_count }} 张照片</span>
+                        </div>
+                        <p class="public-album-owner">
+                            👤 所有者: {{ info.owner_username }}
+                        </p>
+                        <div class="album-card-actions">
+                            <a href="/album/{{ album.id }}" class="btn btn-secondary btn-sm">查看</a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

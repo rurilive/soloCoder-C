@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from PIL import Image
 from jinja2 import Environment, FileSystemLoader
 
-from app.database import get_db, init_db, Photo, User
+from app.database import get_db, init_db, Photo, User, Album, AlbumMember
 from app.auth import get_current_user, get_current_user_required, get_token_from_request
 from app.logger import get_logger
 from app.config import config
@@ -45,6 +45,55 @@ def get_user_upload_dir(user_id: int) -> str:
     thumbnails_dir = os.path.join(user_dir, "thumbnails")
     os.makedirs(thumbnails_dir, exist_ok=True)
     return user_dir
+
+
+def get_user_albums(db: Session, user_id: int) -> List[Album]:
+    owned_albums = db.query(Album).filter(Album.owner_id == user_id).all()
+    member_albums = db.query(Album).join(AlbumMember).filter(AlbumMember.user_id == user_id).all()
+    
+    album_set = {album.id: album for album in owned_albums}
+    for album in member_albums:
+        if album.id not in album_set:
+            album_set[album.id] = album
+    
+    return sorted(album_set.values(), key=lambda x: x.created_at, reverse=True)
+
+
+def get_default_album(db: Session, user_id: int) -> Optional[Album]:
+    return db.query(Album).filter(
+        Album.owner_id == user_id,
+        Album.name == "默认相册"
+    ).first()
+
+
+def get_album_by_id(db: Session, album_id: int) -> Optional[Album]:
+    return db.query(Album).filter(Album.id == album_id).first()
+
+
+def get_album_photos(db: Session, album_id: int) -> List[Photo]:
+    return db.query(Photo).filter(Photo.album_id == album_id).order_by(Photo.created_at.desc()).all()
+
+
+def get_all_tags_for_albums(db: Session, album_ids: List[int]) -> List[str]:
+    photos = db.query(Photo).filter(Photo.album_id.in_(album_ids)).all()
+    tags_set = set()
+    for photo in photos:
+        for tag in photo.get_tags_list():
+            tags_set.add(tag)
+    return sorted(list(tags_set))
+
+
+def get_date_groups_for_albums(db: Session, album_ids: List[int]) -> list:
+    photos = db.query(Photo).filter(Photo.album_id.in_(album_ids)).order_by(Photo.created_at.desc()).all()
+    groups = defaultdict(list)
+    for photo in photos:
+        date_key = photo.created_at.strftime("%Y-%m")
+        groups[date_key].append(photo)
+    return sorted(
+        [{"date": k, "photos": v, "count": len(v)} for k, v in groups.items()],
+        key=lambda x: x["date"],
+        reverse=True
+    )
 
 
 def get_vector_store():
@@ -785,11 +834,32 @@ async def upload_photo(
     file: UploadFile = File(...),
     tags: str = Form(default=""),
     description: str = Form(default=""),
+    album_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
     if not file.content_type.startswith("image/"):
         return HTMLResponse("只能上传图片文件", status_code=400)
+    
+    target_album = None
+    if album_id:
+        target_album = get_album_by_id(db, album_id)
+        if not target_album:
+            raise HTTPException(status_code=404, detail="指定的相册不存在")
+        if not target_album.can_edit(current_user.id):
+            raise HTTPException(status_code=403, detail="您没有权限上传到这个相册")
+    else:
+        target_album = get_default_album(db, current_user.id)
+        if not target_album:
+            target_album = Album(
+                name="默认相册",
+                description="系统自动创建的默认相册",
+                owner_id=current_user.id,
+                is_public=False
+            )
+            db.add(target_album)
+            db.commit()
+            db.refresh(target_album)
     
     user_dir = get_user_upload_dir(current_user.id)
     thumbnails_dir = os.path.join(user_dir, "thumbnails")
@@ -815,6 +885,7 @@ async def upload_photo(
         tags=tags.strip(),
         description=description.strip(),
         user_id=current_user.id,
+        album_id=target_album.id,
     )
     db.add(photo)
     db.commit()
@@ -826,7 +897,8 @@ async def upload_photo(
         tags=tags.strip(),
     )
     
-    return RedirectResponse(url="/", status_code=303)
+    redirect_url = f"/album/{target_album.id}" if album_id else "/"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @app.get("/photo/{photo_id}", response_class=HTMLResponse)
@@ -879,3 +951,475 @@ async def delete_photo(
     db.commit()
     
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/albums", response_class=HTMLResponse)
+async def albums_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    albums = get_user_albums(db, current_user.id)
+    
+    album_info = []
+    for album in albums:
+        photo_count = db.query(Photo).filter(Photo.album_id == album.id).count()
+        is_owner = album.is_owner(current_user.id)
+        
+        member_role = None
+        for member in album.members:
+            if member.user_id == current_user.id:
+                member_role = member.role
+                break
+        
+        album_info.append({
+            "album": album,
+            "photo_count": photo_count,
+            "is_owner": is_owner,
+            "member_role": member_role,
+        })
+    
+    public_albums = db.query(Album).filter(
+        Album.is_public == True,
+        Album.owner_id != current_user.id
+    ).all()
+    
+    public_album_info = []
+    for album in public_albums:
+        photo_count = db.query(Photo).filter(Photo.album_id == album.id).count()
+        public_album_info.append({
+            "album": album,
+            "photo_count": photo_count,
+            "owner_username": album.owner.username if album.owner else f"用户 #{album.owner_id}",
+        })
+    
+    return HTMLResponse(content=render_template(
+        "albums.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "album_info": album_info,
+            "public_album_info": public_album_info,
+            "vector_search_enabled": _embedding_enabled,
+        },
+    ))
+
+
+@app.get("/album/create", response_class=HTMLResponse)
+async def create_album_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    return HTMLResponse(content=render_template(
+        "album_form.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "album": None,
+            "form_action": "/album/create",
+            "vector_search_enabled": _embedding_enabled,
+        },
+    ))
+
+
+@app.post("/album/create", response_class=HTMLResponse)
+async def create_album(
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(default=""),
+    is_public: bool = Form(default=False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    if not name or not name.strip():
+        return HTMLResponse(content=render_template(
+            "album_form.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "album": None,
+                "form_action": "/album/create",
+                "error": "相册名称不能为空",
+                "vector_search_enabled": _embedding_enabled,
+            },
+        ), status_code=400)
+    
+    album = Album(
+        name=name.strip(),
+        description=description.strip(),
+        is_public=is_public,
+        owner_id=current_user.id,
+    )
+    db.add(album)
+    db.commit()
+    db.refresh(album)
+    
+    logger.info(f"User {current_user.id} created album {album.id}: {album.name}")
+    
+    return RedirectResponse(url=f"/album/{album.id}", status_code=303)
+
+
+@app.get("/album/{album_id}", response_class=HTMLResponse)
+async def album_detail(
+    album_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="页码"),
+    q: Optional[str] = Query(None, description="搜索关键词"),
+):
+    current_user = get_current_user(request, db)
+    album = get_album_by_id(db, album_id)
+    
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在")
+    
+    if not album.can_view(current_user.id if current_user else None):
+        if current_user:
+            raise HTTPException(status_code=403, detail="您没有权限访问这个相册")
+        else:
+            return RedirectResponse(url="/login", status_code=303)
+    
+    is_owner = album.is_owner(current_user.id) if current_user else False
+    can_edit = album.can_edit(current_user.id) if current_user else False
+    
+    member_role = None
+    if current_user:
+        for member in album.members:
+            if member.user_id == current_user.id:
+                member_role = member.role
+                break
+    
+    owner_username = album.owner.username if album.owner else f"用户 #{album.owner_id}"
+    
+    album_ids = [album_id]
+    tags = get_all_tags_for_albums(db, album_ids)
+    date_groups = get_date_groups_for_albums(db, album_ids)
+    
+    search_type = None
+    photos = []
+    total = 0
+    photos_with_scores = None
+    
+    base_query = db.query(Photo).filter(Photo.album_id == album_id)
+    
+    if q:
+        logger.debug(f"\n{'='*60}")
+        logger.debug(f"[相册搜索] 开始搜索: '{q}' (album_id={album_id})")
+        logger.debug(f"{'='*60}")
+        
+        logger.debug(f"[相册搜索] 步骤1: 尝试精确匹配 (LIKE 查询)...")
+        query = base_query.filter(Photo.description.like(f"%{q}%"))
+        like_total = query.count()
+        
+        if like_total > 0:
+            logger.info(f"[相册搜索] ✅ 精确匹配找到 {like_total} 个结果")
+            search_type = "exact"
+            
+            total = like_total
+            photos = (
+                query.order_by(Photo.created_at.desc())
+                .offset((page - 1) * PAGE_SIZE)
+                .limit(PAGE_SIZE)
+                .all()
+            )
+        else:
+            logger.debug(f"[相册搜索] ⚠️ 精确匹配没有找到结果")
+            
+            if _embedding_enabled:
+                logger.debug(f"\n[相册搜索] 步骤2: 尝试向量语义搜索...")
+                search_type = "vector"
+                
+                search_results = vector_search(q, top_k=100)
+                search_results = filter_results_by_album(search_results, db, album_id)
+                
+                total = len(search_results)
+                
+                if total > 0:
+                    logger.info(f"[相册搜索] ✅ 向量搜索找到 {total} 个结果")
+                    
+                    start_idx = (page - 1) * PAGE_SIZE
+                    end_idx = start_idx + PAGE_SIZE
+                    paged_results = search_results[start_idx:end_idx]
+                    
+                    photo_ids_with_score = {photo_id: score for photo_id, score in paged_results}
+                    photos_query = db.query(Photo).filter(
+                        Photo.id.in_(list(photo_ids_with_score.keys())),
+                        Photo.album_id == album_id
+                    ).all()
+                    
+                    photos_sorted = sorted(
+                        photos_query,
+                        key=lambda p: photo_ids_with_score.get(p.id, 0),
+                        reverse=True
+                    )
+                    
+                    photos_with_scores = []
+                    for photo in photos_sorted:
+                        score = photo_ids_with_score.get(photo.id, 0)
+                        photos_with_scores.append({
+                            "photo": photo,
+                            "similarity": round(score * 100, 1),
+                        })
+                else:
+                    logger.debug(f"[相册搜索] ⚠️ 向量搜索也没有找到结果")
+                    photos = []
+                    photos_with_scores = []
+            else:
+                logger.debug(f"[相册搜索] ⚠️ 向量搜索未启用，且精确匹配无结果")
+                search_type = "exact"
+                photos = []
+    else:
+        total = base_query.count()
+        photos = (
+            base_query.order_by(Photo.created_at.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+    
+    pagination = get_pagination_info(total, page, PAGE_SIZE)
+    
+    return HTMLResponse(content=render_template(
+        "album_detail.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "album": album,
+            "is_owner": is_owner,
+            "can_edit": can_edit,
+            "member_role": member_role,
+            "owner_username": owner_username,
+            "photos": photos,
+            "photos_with_scores": photos_with_scores,
+            "tags": tags,
+            "date_groups": date_groups,
+            "current_view": "search" if q else "all",
+            "search_query": q,
+            "search_type": search_type,
+            "pagination": pagination,
+            "vector_search_enabled": _embedding_enabled,
+        },
+    ))
+
+
+@app.get("/album/{album_id}/edit", response_class=HTMLResponse)
+async def edit_album_page(
+    album_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    album = get_album_by_id(db, album_id)
+    
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在")
+    
+    if not album.can_edit(current_user.id):
+        raise HTTPException(status_code=403, detail="您没有权限编辑这个相册")
+    
+    return HTMLResponse(content=render_template(
+        "album_form.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "album": album,
+            "form_action": f"/album/{album_id}/edit",
+            "vector_search_enabled": _embedding_enabled,
+        },
+    ))
+
+
+@app.post("/album/{album_id}/edit", response_class=HTMLResponse)
+async def edit_album(
+    album_id: int,
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(default=""),
+    is_public: bool = Form(default=False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    album = get_album_by_id(db, album_id)
+    
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在")
+    
+    if not album.can_edit(current_user.id):
+        raise HTTPException(status_code=403, detail="您没有权限编辑这个相册")
+    
+    if not name or not name.strip():
+        return HTMLResponse(content=render_template(
+            "album_form.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "album": album,
+                "form_action": f"/album/{album_id}/edit",
+                "error": "相册名称不能为空",
+                "vector_search_enabled": _embedding_enabled,
+            },
+        ), status_code=400)
+    
+    album.name = name.strip()
+    album.description = description.strip()
+    album.is_public = is_public
+    
+    db.commit()
+    
+    logger.info(f"User {current_user.id} updated album {album.id}")
+    
+    return RedirectResponse(url=f"/album/{album.id}", status_code=303)
+
+
+@app.post("/album/{album_id}/delete")
+async def delete_album(
+    album_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    album = get_album_by_id(db, album_id)
+    
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在")
+    
+    if not album.is_owner(current_user.id):
+        raise HTTPException(status_code=403, detail="只有相册所有者可以删除相册")
+    
+    if album.name == "默认相册":
+        raise HTTPException(status_code=400, detail="默认相册不能删除")
+    
+    photos = db.query(Photo).filter(Photo.album_id == album_id).all()
+    for photo in photos:
+        remove_from_vector_store(photo.id)
+        
+        user_dir = get_user_upload_dir(photo.user_id)
+        file_path = os.path.join(user_dir, photo.filename)
+        thumbnail_path = os.path.join(user_dir, "thumbnails", photo.thumbnail_filename)
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        if os.path.exists(thumbnail_path):
+            os.remove(thumbnail_path)
+        
+        db.delete(photo)
+    
+    db.delete(album)
+    db.commit()
+    
+    logger.info(f"User {current_user.id} deleted album {album.id}")
+    
+    return RedirectResponse(url="/albums", status_code=303)
+
+
+@app.post("/album/{album_id}/invite")
+async def invite_member(
+    album_id: int,
+    request: Request,
+    username: str = Form(...),
+    role: str = Form(default="viewer"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    album = get_album_by_id(db, album_id)
+    
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在")
+    
+    if not album.is_owner(current_user.id):
+        raise HTTPException(status_code=403, detail="只有相册所有者可以邀请成员")
+    
+    invited_user = db.query(User).filter(User.username == username.strip()).first()
+    if not invited_user:
+        raise HTTPException(status_code=404, detail=f"用户 '{username}' 不存在")
+    
+    if invited_user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能邀请自己")
+    
+    existing_member = db.query(AlbumMember).filter(
+        AlbumMember.album_id == album_id,
+        AlbumMember.user_id == invited_user.id
+    ).first()
+    
+    if existing_member:
+        raise HTTPException(status_code=400, detail=f"用户 '{username}' 已经是相册成员")
+    
+    member = AlbumMember(
+        album_id=album_id,
+        user_id=invited_user.id,
+        role=role,
+        invited_by=current_user.id,
+    )
+    db.add(member)
+    db.commit()
+    
+    logger.info(f"User {current_user.id} invited {invited_user.id} to album {album_id} as {role}")
+    
+    return RedirectResponse(url=f"/album/{album_id}", status_code=303)
+
+
+@app.post("/album/{album_id}/remove-member/{member_id}")
+async def remove_member(
+    album_id: int,
+    member_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    album = get_album_by_id(db, album_id)
+    
+    if not album:
+        raise HTTPException(status_code=404, detail="相册不存在")
+    
+    if not album.is_owner(current_user.id):
+        raise HTTPException(status_code=403, detail="只有相册所有者可以移除成员")
+    
+    member = db.query(AlbumMember).filter(
+        AlbumMember.album_id == album_id,
+        AlbumMember.user_id == member_id
+    ).first()
+    
+    if not member:
+        raise HTTPException(status_code=404, detail="成员不存在")
+    
+    db.delete(member)
+    db.commit()
+    
+    logger.info(f"User {current_user.id} removed member {member_id} from album {album_id}")
+    
+    return RedirectResponse(url=f"/album/{album_id}", status_code=303)
+
+
+def filter_results_by_album(
+    results: List[Tuple[int, float]], 
+    db: Session, 
+    album_id: int
+) -> List[Tuple[int, float]]:
+    logger.debug(f"\n{'='*60}")
+    logger.debug(f"[filter_results_by_album] 按相册过滤结果")
+    logger.debug(f"{'='*60}")
+    logger.debug(f"  - 相册ID: {album_id}")
+    logger.debug(f"  - 输入结果数: {len(results)}")
+    
+    if len(results) == 0:
+        return []
+    
+    photo_ids = [r[0] for r in results]
+    
+    logger.debug(f"\n[filter_results_by_album] 查询数据库中属于该相册的照片...")
+    album_photos = db.query(Photo).filter(
+        Photo.id.in_(photo_ids),
+        Photo.album_id == album_id
+    ).all()
+    
+    logger.info(f"[filter_results_by_album] 查询到 {len(album_photos)} 张照片属于该相册")
+    
+    album_photo_ids = {p.id for p in album_photos}
+    filtered = [(photo_id, score) for photo_id, score in results if photo_id in album_photo_ids]
+    
+    logger.info(f"\n[filter_results_by_album] 过滤结果:")
+    logger.info(f"  - 过滤前: {len(results)} 个结果")
+    logger.info(f"  - 过滤后: {len(filtered)} 个结果")
+    
+    logger.debug(f"{'='*60}\n")
+    
+    return filtered
