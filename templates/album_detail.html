@@ -667,7 +667,7 @@
                     </h2>
                     <div class="album-meta">
                         <span>👤 所有者: {{ owner_username }}</span>
-                        <span>📅 创建: {{ album.created_at.strftime('%Y-%m-%d') }}</span>
+                        <span>📅 创建: {% if album.created_at %}{{ album.created_at.strftime('%Y-%m-%d') }}{% else %}未知{% endif %}</span>
                         {% if member_role %}
                         <span>🔑 您的角色: 
                             {% if member_role == 'editor' %}

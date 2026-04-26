@@ -399,7 +399,7 @@
                             <p class="album-card-description">{{ album.description }}</p>
                             {% endif %}
                             <div class="album-card-meta">
-                                <span>{{ album.created_at.strftime('%Y-%m-%d') }} 创建</span>
+                                <span>{% if album.created_at %}{{ album.created_at.strftime('%Y-%m-%d') }} 创建{% else %}未知日期{% endif %}</span>
                                 <span>{{ info.photo_count }} 张照片</span>
                             </div>
                             <div class="album-card-actions">
@@ -450,7 +450,7 @@
                         <p class="album-card-description">{{ album.description }}</p>
                         {% endif %}
                         <div class="album-card-meta">
-                            <span>{{ album.created_at.strftime('%Y-%m-%d') }} 创建</span>
+                            <span>{% if album.created_at %}{{ album.created_at.strftime('%Y-%m-%d') }} 创建{% else %}未知日期{% endif %}</span>
                             <span>{{ info.photo_count }} 张照片</span>
                         </div>
                         <p class="public-album-owner">

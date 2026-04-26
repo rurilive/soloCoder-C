@@ -1,5 +1,6 @@
 import os
 import shutil
+from datetime import datetime
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker
 from app.config import config
@@ -104,9 +105,10 @@ def create_album_tables():
             
             if not existing_album:
                 logger.info(f"为用户 {user_id} 创建默认相册...")
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 result = conn.execute(
-                    text("INSERT INTO albums (name, description, owner_id, is_public) VALUES (:name, :description, :owner_id, :is_public)"),
-                    {"name": "默认相册", "description": "系统自动创建的默认相册", "owner_id": user_id, "is_public": 0}
+                    text("INSERT INTO albums (name, description, owner_id, is_public, created_at, updated_at) VALUES (:name, :description, :owner_id, :is_public, :created_at, :updated_at)"),
+                    {"name": "默认相册", "description": "系统自动创建的默认相册", "owner_id": user_id, "is_public": 0, "created_at": now, "updated_at": now}
                 )
                 album_id = result.lastrowid
                 conn.commit()
