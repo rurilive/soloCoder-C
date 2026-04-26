@@ -38,12 +38,12 @@ class EmbeddingService:
             logger.warning(f"[EmbeddingService.embed_text] 文本为空，返回 None")
             return None
         
-        logger.info(f"\n{'='*60}")
-        logger.info(f"[EmbeddingService.embed_text] 开始生成嵌入向量")
-        logger.info(f"{'='*60}")
-        logger.info(f"  - 输入文本: '{text.strip()}'")
-        logger.info(f"  - Model: {self.model}")
-        logger.info(f"  - 期望维度: {self.dimensions}")
+        logger.debug(f"\n{'='*60}")
+        logger.debug(f"[EmbeddingService.embed_text] 开始生成嵌入向量")
+        logger.debug(f"{'='*60}")
+        logger.debug(f"  - 输入文本: '{text.strip()}'")
+        logger.debug(f"  - Model: {self.model}")
+        logger.debug(f"  - 期望维度: {self.dimensions}")
         
         try:
             logger.debug(f"[EmbeddingService.embed_text] 调用 OpenAI API...")
@@ -56,7 +56,7 @@ class EmbeddingService:
             embedding = response.data[0].embedding
             
             logger.info(f"[EmbeddingService.embed_text] ✅ API 调用成功")
-            logger.info(f"  - 返回向量维度: {len(embedding)}")
+            logger.debug(f"  - 返回向量维度: {len(embedding)}")
             
             if len(embedding) != self.dimensions:
                 logger.warning(f"[EmbeddingService.embed_text] ⚠️ 向量维度不匹配!")
@@ -67,11 +67,11 @@ class EmbeddingService:
                 arr = np.array(embedding, dtype=np.float32)
                 norm = np.linalg.norm(arr)
                 
-                logger.info(f"  - 向量统计信息:")
-                logger.info(f"    - min: {arr.min():.6f}")
-                logger.info(f"    - max: {arr.max():.6f}")
-                logger.info(f"    - mean: {arr.mean():.6f}")
-                logger.info(f"    - L2 norm: {norm:.6f}")
+                logger.debug(f"  - 向量统计信息:")
+                logger.debug(f"    - min: {arr.min():.6f}")
+                logger.debug(f"    - max: {arr.max():.6f}")
+                logger.debug(f"    - mean: {arr.mean():.6f}")
+                logger.debug(f"    - L2 norm: {norm:.6f}")
                 
                 if norm < 0.999 or norm > 1.001:
                     logger.warning(f"[EmbeddingService.embed_text] ⚠️ 向量未归一化!")
@@ -82,7 +82,7 @@ class EmbeddingService:
                 if zero_count > 0:
                     logger.debug(f"  - 接近零的元素数: {zero_count}/{len(arr)}")
             
-            logger.info(f"{'='*60}\n")
+            logger.debug(f"{'='*60}\n")
             return embedding
             
         except Exception as e:

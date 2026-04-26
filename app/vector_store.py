@@ -407,25 +407,25 @@ class VectorStore:
         top_k: int = 10,
         threshold: Optional[float] = None,
     ) -> List[Tuple[int, float]]:
-        logger.info(f"\n{'='*60}")
-        logger.info(f"[VectorStore.search_combined] 组合向量搜索")
-        logger.info(f"{'='*60}")
+        logger.debug(f"\n{'='*60}")
+        logger.debug(f"[VectorStore.search_combined] 组合向量搜索")
+        logger.debug(f"{'='*60}")
         
         query = np.array(query_embedding, dtype=np.float32)
-        logger.info(f"  - 查询向量维度: {len(query)}")
-        logger.info(f"  - 查询向量统计:")
-        logger.info(f"    - min: {query.min():.6f}")
-        logger.info(f"    - max: {query.max():.6f}")
-        logger.info(f"    - mean: {query.mean():.6f}")
-        logger.info(f"    - L2 norm: {np.linalg.norm(query):.6f}")
-        logger.info(f"  - 总条目数: {len(self._entries)}")
-        logger.info(f"  - 文本嵌入数: {len(self._text_embeddings)}")
-        logger.info(f"  - 图像嵌入数: {len(self._image_embeddings)}")
+        logger.debug(f"  - 查询向量维度: {len(query)}")
+        logger.debug(f"  - 查询向量统计:")
+        logger.debug(f"    - min: {query.min():.6f}")
+        logger.debug(f"    - max: {query.max():.6f}")
+        logger.debug(f"    - mean: {query.mean():.6f}")
+        logger.debug(f"    - L2 norm: {np.linalg.norm(query):.6f}")
+        logger.debug(f"  - 总条目数: {len(self._entries)}")
+        logger.debug(f"  - 文本嵌入数: {len(self._text_embeddings)}")
+        logger.debug(f"  - 图像嵌入数: {len(self._image_embeddings)}")
         
         if threshold is None:
             threshold = config.VECTOR_SEARCH_SIMILARITY_THRESHOLD
         
-        logger.info(f"  - 配置的相似度阈值: {threshold}")
+        logger.debug(f"  - 配置的相似度阈值: {threshold}")
         
         if len(self._entries) == 0:
             logger.warning(f"[VectorStore.search_combined] ⚠️ 向量存储中没有任何条目！")
@@ -434,7 +434,7 @@ class VectorStore:
             logger.warning(f"  2. 上传照片时 OpenAI API 调用失败")
             logger.warning(f"  3. 向量存储文件损坏或未正确保存")
         
-        logger.info(f"\n[VectorStore.search_combined] 开始逐一比较:")
+        logger.debug(f"\n[VectorStore.search_combined] 开始逐一比较:")
         results_with_source = []
         total_count = 0
         
@@ -443,14 +443,14 @@ class VectorStore:
             max_sim = 0.0
             best_source = "无"
             
-            logger.info(f"\n  --- photo_id={photo_id} ---")
-            logger.info(f"      description: '{entry.description}'")
-            logger.info(f"      tags: '{entry.tags}'")
+            logger.debug(f"\n  --- photo_id={photo_id} ---")
+            logger.debug(f"      description: '{entry.description}'")
+            logger.debug(f"      tags: '{entry.tags}'")
             
             if photo_id in self._text_embeddings:
                 emb = self._text_embeddings[photo_id]
                 text_sim = self.cosine_similarity(query, emb)
-                logger.info(f"      文本相似度: {text_sim:.6f} (嵌入维度: {len(emb)})")
+                logger.debug(f"      文本相似度: {text_sim:.6f} (嵌入维度: {len(emb)})")
                 
                 if text_sim > max_sim:
                     max_sim = text_sim
@@ -459,51 +459,49 @@ class VectorStore:
             if photo_id in self._image_embeddings:
                 emb = self._image_embeddings[photo_id]
                 image_sim = self.cosine_similarity(query, emb)
-                logger.info(f"      图像相似度: {image_sim:.6f} (嵌入维度: {len(emb)})")
+                logger.debug(f"      图像相似度: {image_sim:.6f} (嵌入维度: {len(emb)})")
                 
                 if image_sim > max_sim:
                     max_sim = image_sim
                     best_source = "图像"
             
-            logger.info(f"      最大相似度: {max_sim:.6f} (来源: {best_source})")
+            logger.debug(f"      最大相似度: {max_sim:.6f} (来源: {best_source})")
             
             total_count += 1
             if max_sim >= threshold:
-                logger.info(f"      ✅ 满足阈值条件 (>= {threshold})，加入结果")
+                logger.debug(f"      ✅ 满足阈值条件 (>= {threshold})，加入结果")
                 results_with_source.append((photo_id, max_sim, best_source))
             else:
-                logger.info(f"      ❌ 不满足阈值条件 (< {threshold})，被过滤")
+                logger.debug(f"      ❌ 不满足阈值条件 (< {threshold})，被过滤")
         
         results_with_source.sort(key=lambda x: x[1], reverse=True)
         results = [(r[0], r[1]) for r in results_with_source]
         
         filtered_count = total_count - len(results)
         
-        logger.info(f"\n{'='*60}")
-        logger.info(f"[VectorStore.search_combined] 最终搜索结果")
-        logger.info(f"{'='*60}")
+        logger.info(f"\n[VectorStore.search_combined] 搜索完成:")
         logger.info(f"  - 总比较数: {total_count}")
         logger.info(f"  - 通过阈值: {len(results)} (阈值: {threshold})")
         logger.info(f"  - 被过滤: {filtered_count}")
         
         if len(results) > 0:
-            logger.info(f"\n  Top {min(top_k, len(results))} 结果:")
+            logger.debug(f"\n  Top {min(top_k, len(results))} 结果:")
             for i, (pid, sim, source) in enumerate(results_with_source[:top_k]):
                 entry = self._entries.get(pid)
                 desc = entry.description if entry else ""
                 tags = entry.tags if entry else ""
-                logger.info(f"  {i+1}. photo_id={pid}")
-                logger.info(f"     相似度: {sim:.6f} ({sim*100:.2f}%)")
-                logger.info(f"     来源: {source}")
-                logger.info(f"     描述: '{desc}'")
-                logger.info(f"     标签: '{tags}'")
+                logger.debug(f"  {i+1}. photo_id={pid}")
+                logger.debug(f"     相似度: {sim:.6f} ({sim*100:.2f}%)")
+                logger.debug(f"     来源: {source}")
+                logger.debug(f"     描述: '{desc}'")
+                logger.debug(f"     标签: '{tags}'")
         else:
             logger.warning(f"  ⚠️ 没有找到任何匹配的结果")
             if filtered_count > 0:
                 logger.warning(f"     所有 {filtered_count} 个候选都被阈值过滤掉了")
                 logger.warning(f"     建议降低 VECTOR_SEARCH_SIMILARITY_THRESHOLD")
         
-        logger.info(f"{'='*60}\n")
+        logger.debug(f"{'='*60}\n")
         
         return results[:top_k]
     

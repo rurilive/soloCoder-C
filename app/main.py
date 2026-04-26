@@ -147,13 +147,13 @@ def add_to_vector_store(
 ) -> bool:
     global _embedding_enabled
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"[add_to_vector_store] 开始添加到向量存储")
-    logger.info(f"{'='*60}")
-    logger.info(f"  - photo_id: {photo_id}")
-    logger.info(f"  - description: '{description}'")
-    logger.info(f"  - tags: '{tags}'")
-    logger.info(f"  - _embedding_enabled: {_embedding_enabled}")
+    logger.debug(f"\n{'='*60}")
+    logger.debug(f"[add_to_vector_store] 开始添加到向量存储")
+    logger.debug(f"{'='*60}")
+    logger.debug(f"  - photo_id: {photo_id}")
+    logger.debug(f"  - description: '{description}'")
+    logger.debug(f"  - tags: '{tags}'")
+    logger.debug(f"  - _embedding_enabled: {_embedding_enabled}")
     
     if not _embedding_enabled:
         logger.warning(f"[add_to_vector_store] ⚠️ 向量搜索未启用，跳过")
@@ -194,11 +194,11 @@ def add_to_vector_store(
 def remove_from_vector_store(photo_id: int):
     global _embedding_enabled
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"[remove_from_vector_store] 从向量存储中删除条目")
-    logger.info(f"{'='*60}")
-    logger.info(f"  - photo_id: {photo_id}")
-    logger.info(f"  - _embedding_enabled: {_embedding_enabled}")
+    logger.debug(f"\n{'='*60}")
+    logger.debug(f"[remove_from_vector_store] 从向量存储中删除条目")
+    logger.debug(f"{'='*60}")
+    logger.debug(f"  - photo_id: {photo_id}")
+    logger.debug(f"  - _embedding_enabled: {_embedding_enabled}")
     
     if not _embedding_enabled:
         logger.warning(f"[remove_from_vector_store] ⚠️ 向量搜索未启用，跳过删除")
@@ -210,16 +210,16 @@ def remove_from_vector_store(photo_id: int):
         
         entry = vector_store.get_entry(photo_id)
         if entry:
-            logger.info(f"  - 找到条目: description='{entry.description}', tags='{entry.tags}'")
+            logger.debug(f"  - 找到条目: description='{entry.description}', tags='{entry.tags}'")
         
         has_text = vector_store.has_text_embedding(photo_id)
         has_image = vector_store.has_image_embedding(photo_id)
-        logger.info(f"  - 文本嵌入: {'有' if has_text else '无'}")
-        logger.info(f"  - 图像嵌入: {'有' if has_image else '无'}")
+        logger.debug(f"  - 文本嵌入: {'有' if has_text else '无'}")
+        logger.debug(f"  - 图像嵌入: {'有' if has_image else '无'}")
         
         vector_store.remove_entry(photo_id)
         logger.info(f"[remove_from_vector_store] ✅ 已从向量存储中删除 photo_id={photo_id}")
-        logger.info(f"{'='*60}\n")
+        logger.debug(f"{'='*60}\n")
         
     except Exception as e:
         logger.error(f"[remove_from_vector_store] ❌ 从向量存储删除时出错: {e}")
@@ -234,12 +234,12 @@ def vector_search(
 ) -> List[Tuple[int, float]]:
     global _embedding_enabled
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"[vector_search] ========== 开始向量搜索 ==========")
-    logger.info(f"{'='*60}")
-    logger.info(f"  - 搜索词: '{query}'")
-    logger.info(f"  - top_k: {top_k}")
-    logger.info(f"  - _embedding_enabled: {_embedding_enabled}")
+    logger.debug(f"\n{'='*60}")
+    logger.debug(f"[vector_search] ========== 开始向量搜索 ==========")
+    logger.debug(f"{'='*60}")
+    logger.debug(f"  - 搜索词: '{query}'")
+    logger.debug(f"  - top_k: {top_k}")
+    logger.debug(f"  - _embedding_enabled: {_embedding_enabled}")
     
     if not _embedding_enabled:
         logger.warning(f"[vector_search] ⚠️ 向量搜索未启用，返回空结果")
@@ -269,10 +269,10 @@ def vector_search(
     vector_store = get_vector_store()
     logger.debug("[vector_search] ✅ vector_store 获取成功")
     
-    logger.info(f"\n[vector_search] 步骤4: 检查向量存储内容...")
-    logger.info(f"  - 总条目数: {len(vector_store._entries)}")
-    logger.info(f"  - 文本嵌入数: {len(vector_store._text_embeddings)}")
-    logger.info(f"  - 图像嵌入数: {len(vector_store._image_embeddings)}")
+    logger.debug(f"\n[vector_search] 步骤4: 检查向量存储内容...")
+    logger.debug(f"  - 总条目数: {len(vector_store._entries)}")
+    logger.debug(f"  - 文本嵌入数: {len(vector_store._text_embeddings)}")
+    logger.debug(f"  - 图像嵌入数: {len(vector_store._image_embeddings)}")
     
     if len(vector_store._entries) == 0:
         logger.warning(f"[vector_search] ⚠️ 向量存储中没有任何条目！")
@@ -281,7 +281,7 @@ def vector_search(
         logger.warning(f"  2. 上传照片时 OpenAI API 调用失败")
         logger.warning(f"  3. 向量存储文件损坏或未正确保存")
     
-    logger.info(f"\n[vector_search] 所有条目详情:")
+    logger.debug(f"\n[vector_search] 所有条目详情:")
     for pid, entry in vector_store._entries.items():
         has_text = pid in vector_store._text_embeddings
         has_image = pid in vector_store._image_embeddings
@@ -292,43 +292,43 @@ def vector_search(
         else:
             emb_info = "无"
         
-        logger.info(f"  [{pid}] description='{entry.description}', tags='{entry.tags}'")
-        logger.info(f"       text_embedding={has_text}, image_embedding={has_image}")
-        logger.info(f"       文本嵌入信息: {emb_info}")
+        logger.debug(f"  [{pid}] description='{entry.description}', tags='{entry.tags}'")
+        logger.debug(f"       text_embedding={has_text}, image_embedding={has_image}")
+        logger.debug(f"       文本嵌入信息: {emb_info}")
     
     logger.info(f"\n[vector_search] 步骤5: 执行搜索...")
     results = vector_store.search_combined(query_embedding, top_k=top_k)
     
-    logger.info(f"\n[vector_search] 步骤6: 搜索结果汇总:")
+    logger.info(f"\n[vector_search] 搜索结果汇总:")
     logger.info(f"  - 结果数量: {len(results)}")
     
     if results:
-        logger.info(f"\n  完整结果列表:")
+        logger.debug(f"\n  完整结果列表:")
         for i, (pid, score) in enumerate(results):
             entry = vector_store._entries.get(pid)
             desc = entry.description if entry else "N/A"
             tags = entry.tags if entry else "N/A"
-            logger.info(f"    {i+1}. photo_id={pid}, 相似度={score:.6f} ({score*100:.2f}%)")
-            logger.info(f"       description='{desc}', tags='{tags}'")
+            logger.debug(f"    {i+1}. photo_id={pid}, 相似度={score:.6f} ({score*100:.2f}%)")
+            logger.debug(f"       description='{desc}', tags='{tags}'")
     else:
         logger.warning(f"  ⚠️ 没有找到任何匹配的结果")
         logger.warning(f"     可能的原因:")
         logger.warning(f"     1. 没有任何条目有文本/图像嵌入")
         logger.warning(f"     2. 相似度计算结果都为 0")
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"[vector_search] ========== 搜索结束 ==========")
-    logger.info(f"{'='*60}\n")
+    logger.debug(f"\n{'='*60}")
+    logger.debug(f"[vector_search] ========== 搜索结束 ==========")
+    logger.debug(f"{'='*60}\n")
     
     return results
 
 
 def filter_results_by_user(results: List[Tuple[int, float]], db: Session, user_id: int) -> List[Tuple[int, float]]:
-    logger.info(f"\n{'='*60}")
-    logger.info(f"[filter_results_by_user] 按用户过滤结果")
-    logger.info(f"{'='*60}")
-    logger.info(f"  - 用户ID: {user_id}")
-    logger.info(f"  - 输入结果数: {len(results)}")
+    logger.debug(f"\n{'='*60}")
+    logger.debug(f"[filter_results_by_user] 按用户过滤结果")
+    logger.debug(f"{'='*60}")
+    logger.debug(f"  - 用户ID: {user_id}")
+    logger.debug(f"  - 输入结果数: {len(results)}")
     
     if len(results) == 0:
         logger.debug("[filter_results_by_user] 输入结果为空，直接返回")
@@ -367,7 +367,7 @@ def filter_results_by_user(results: List[Tuple[int, float]], db: Session, user_i
         for i, (pid, score) in enumerate(filtered):
             logger.debug(f"    {i+1}. photo_id={pid}, 相似度={score:.6f}")
     
-    logger.info(f"{'='*60}\n")
+    logger.debug(f"{'='*60}\n")
     
     return filtered
 
@@ -485,11 +485,11 @@ async def index(
     photos_with_scores = None
     
     if q:
-        logger.info(f"\n{'='*60}")
-        logger.info(f"[首页搜索] 开始搜索: '{q}'")
-        logger.info(f"{'='*60}")
+        logger.debug(f"\n{'='*60}")
+        logger.debug(f"[首页搜索] 开始搜索: '{q}'")
+        logger.debug(f"{'='*60}")
         
-        logger.info(f"[首页搜索] 步骤1: 尝试精确匹配 (LIKE 查询)...")
+        logger.debug(f"[首页搜索] 步骤1: 尝试精确匹配 (LIKE 查询)...")
         query = db.query(Photo).filter(
             Photo.user_id == current_user.id,
             Photo.description.like(f"%{q}%")
@@ -508,10 +508,10 @@ async def index(
                 .all()
             )
         else:
-            logger.info(f"[首页搜索] ⚠️ 精确匹配没有找到结果")
+            logger.debug(f"[首页搜索] ⚠️ 精确匹配没有找到结果")
             
             if _embedding_enabled:
-                logger.info(f"\n[首页搜索] 步骤2: 尝试向量语义搜索...")
+                logger.debug(f"\n[首页搜索] 步骤2: 尝试向量语义搜索...")
                 search_type = "vector"
                 
                 search_results = vector_search(q, top_k=100)
@@ -546,11 +546,11 @@ async def index(
                             "similarity": round(score * 100, 1),
                         })
                 else:
-                    logger.info(f"[首页搜索] ⚠️ 向量搜索也没有找到结果")
+                    logger.debug(f"[首页搜索] ⚠️ 向量搜索也没有找到结果")
                     photos = []
                     photos_with_scores = []
             else:
-                logger.info(f"[首页搜索] ⚠️ 向量搜索未启用，且精确匹配无结果")
+                logger.debug(f"[首页搜索] ⚠️ 向量搜索未启用，且精确匹配无结果")
                 search_type = "exact"
                 photos = []
     else:
@@ -569,7 +569,7 @@ async def index(
     logger.info(f"  - 搜索关键词: '{q}'")
     logger.info(f"  - 搜索类型: {search_type or '浏览全部'}")
     logger.info(f"  - 总结果数: {total}")
-    logger.info(f"{'='*60}\n")
+    logger.debug(f"{'='*60}\n")
     
     return HTMLResponse(content=render_template(
         "index.html",
