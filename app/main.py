@@ -518,6 +518,7 @@ async def index(
     db: Session = Depends(get_db),
     q: Optional[str] = Query(None, description="搜索关键词"),
     page: int = Query(1, ge=1, description="页码"),
+    album_id: Optional[int] = Query(None, description="相册ID筛选"),
 ):
     current_user = get_current_user(request, db)
     if not current_user:
@@ -525,13 +526,31 @@ async def index(
     
     global _embedding_enabled
     
-    tags = get_all_tags(db, current_user.id)
-    date_groups = get_date_groups(db, current_user.id)
+    user_albums = get_user_albums(db, current_user.id)
+    
+    current_album = None
+    if album_id:
+        current_album = get_album_by_id(db, album_id)
+        if not current_album or not current_album.can_view(current_user.id):
+            current_album = None
+    
+    if current_album:
+        tags = get_all_tags_for_albums(db, [current_album.id])
+        date_groups = get_date_groups_for_albums(db, [current_album.id])
+    else:
+        tags = get_all_tags(db, current_user.id)
+        date_groups = get_date_groups(db, current_user.id)
     
     search_type = None
     photos = []
     total = 0
     photos_with_scores = None
+    
+    def get_base_query():
+        query = db.query(Photo).filter(Photo.user_id == current_user.id)
+        if current_album:
+            query = query.filter(Photo.album_id == current_album.id)
+        return query
     
     if q:
         logger.debug(f"\n{'='*60}")
@@ -539,10 +558,7 @@ async def index(
         logger.debug(f"{'='*60}")
         
         logger.debug(f"[首页搜索] 步骤1: 尝试精确匹配 (LIKE 查询)...")
-        query = db.query(Photo).filter(
-            Photo.user_id == current_user.id,
-            Photo.description.like(f"%{q}%")
-        )
+        query = get_base_query().filter(Photo.description.like(f"%{q}%"))
         like_total = query.count()
         
         if like_total > 0:
@@ -564,7 +580,11 @@ async def index(
                 search_type = "vector"
                 
                 search_results = vector_search(q, top_k=100)
-                search_results = filter_results_by_user(search_results, db, current_user.id)
+                
+                if current_album:
+                    search_results = filter_results_by_album(search_results, db, current_album.id)
+                else:
+                    search_results = filter_results_by_user(search_results, db, current_user.id)
                 
                 total = len(search_results)
                 
@@ -577,9 +597,13 @@ async def index(
                     
                     photo_ids_with_score = {photo_id: score for photo_id, score in paged_results}
                     photos_query = db.query(Photo).filter(
-                        Photo.id.in_(list(photo_ids_with_score.keys())),
-                        Photo.user_id == current_user.id
-                    ).all()
+                        Photo.id.in_(list(photo_ids_with_score.keys()))
+                    )
+                    if current_album:
+                        photos_query = photos_query.filter(Photo.album_id == current_album.id)
+                    else:
+                        photos_query = photos_query.filter(Photo.user_id == current_user.id)
+                    photos_query = photos_query.all()
                     
                     photos_sorted = sorted(
                         photos_query,
@@ -603,7 +627,7 @@ async def index(
                 search_type = "exact"
                 photos = []
     else:
-        query = db.query(Photo).filter(Photo.user_id == current_user.id)
+        query = get_base_query()
         total = query.count()
         photos = (
             query.order_by(Photo.created_at.desc())
@@ -625,6 +649,8 @@ async def index(
         {
             "request": request,
             "current_user": current_user,
+            "user_albums": user_albums,
+            "current_album": current_album,
             "photos": photos,
             "photos_with_scores": photos_with_scores,
             "tags": tags,

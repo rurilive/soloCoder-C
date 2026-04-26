@@ -479,6 +479,7 @@
                     </p>
                     <div class="nav-tabs">
                         <a href="/" class="nav-tab active">📷 全部图片</a>
+                        <a href="/albums" class="nav-tab">📁 相册管理</a>
                         {% if vector_search_enabled %}
                         <a href="/vector-search" class="nav-tab">🔍 向量搜索</a>
                         {% endif %}
@@ -498,9 +499,12 @@
                     </div>
                     {% endif %}
                     <form class="search-form" action="/" method="get">
+                        {% if current_album %}
+                            <input type="hidden" name="album_id" value="{{ current_album.id }}">
+                        {% endif %}
                         <input type="text" name="q" placeholder="搜索图片描述..." value="{{ search_query or '' }}">
                         <button type="submit">🔍 搜索</button>
-                        {% if search_query %}
+                        {% if search_query or current_album %}
                             <a href="/" class="btn btn-secondary btn-sm">清除</a>
                         {% endif %}
                     </form>
@@ -522,6 +526,19 @@
                             <label for="file">选择图片</label>
                             <input type="file" id="file" name="file" accept="image/*" required>
                         </div>
+                        {% if user_albums %}
+                        <div class="form-group">
+                            <label for="album_id">上传到相册</label>
+                            <select id="album_id" name="album_id">
+                                {% for album in user_albums %}
+                                    <option value="{{ album.id }}" {% if current_album and current_album.id == album.id %}selected{% endif %}>
+                                        {{ album.name }}
+                                        {% if album.is_public %} (公开){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
                         <div class="form-group">
                             <label for="tags">标签（多个标签用逗号分隔）</label>
                             <input type="text" id="tags" name="tags" placeholder="例如：旅行, 风景, 家庭">
@@ -534,7 +551,16 @@
                     </form>
                 </div>
                 
-                {% if current_view != 'all' %}
+                {% if current_album %}
+                    <div class="current-filter">
+                        <span>
+                            📁 相册: {{ current_album.name }}
+                            {% if current_album.is_public %} (公开){% endif %}
+                            (共 {{ pagination.total }} 张)
+                        </span>
+                        <a href="/" class="btn btn-sm btn-primary">返回全部</a>
+                    </div>
+                {% elif current_view != 'all' %}
                     <div class="current-filter">
                         <span>
                             {% if current_view == 'search' %}
@@ -551,7 +577,18 @@
                 {% endif %}
                 
                 <h2 class="section-title">
-                    {% if current_view == 'search' %}
+                    {% if current_album and current_view == 'search' %}
+                        🔍 在 "{{ current_album.name }}" 中搜索: "{{ search_query }}"
+                        {% if search_type == 'vector' %}
+                            <span style="font-size: 0.8rem; color: #667eea; margin-left: 0.5rem;">
+                                (向量语义搜索)
+                            </span>
+                        {% elif search_type == 'exact' %}
+                            <span style="font-size: 0.8rem; color: #667eea; margin-left: 0.5rem;">
+                                (精确匹配)
+                            </span>
+                        {% endif %}
+                    {% elif current_view == 'search' %}
                         🔍 搜索结果: "{{ search_query }}"
                         {% if search_type == 'vector' %}
                             <span style="font-size: 0.8rem; color: #667eea; margin-left: 0.5rem;">
@@ -562,6 +599,9 @@
                                 (精确匹配)
                             </span>
                         {% endif %}
+                    {% elif current_album %}
+                        📁 {{ current_album.name }}
+                        {% if current_album.is_public %} (公开){% endif %}
                     {% elif current_view == 'tag' %}
                         🏷️ 标签: {{ current_tag }}
                     {% elif current_view == 'date' %}
