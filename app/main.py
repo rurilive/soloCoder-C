@@ -1,14 +1,31 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+import os
 
 from app.database import engine, Base
 from app.routers.documents import router as documents_router
 from app.routers.upload import router as upload_router
 from app.routers.folders import router as folders_router
 from app.routers.search import router as search_router
+
+
+template_dir = os.path.join(os.path.dirname(__file__), "templates")
+jinja_env = Environment(
+    loader=FileSystemLoader(template_dir),
+    autoescape=select_autoescape(["html", "xml"]),
+    cache_size=0,
+)
+
+
+def render_template(template_name: str, context: dict = None) -> HTMLResponse:
+    if context is None:
+        context = {}
+    template = jinja_env.get_template(template_name)
+    return HTMLResponse(template.render(**context))
 
 
 @asynccontextmanager
@@ -33,7 +50,6 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
 
 app.include_router(documents_router, prefix="/api/documents", tags=["documents"])
 app.include_router(upload_router, prefix="/api/upload", tags=["upload"])
@@ -41,21 +57,35 @@ app.include_router(folders_router, prefix="/api/folders", tags=["folders"])
 app.include_router(search_router, prefix="/api/search", tags=["search"])
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return render_template("index.html", {
+        "request": request,
+        "query": "",
+    })
 
 
-@app.get("/document/{doc_id}")
+@app.get("/document/{doc_id}", response_class=HTMLResponse)
 async def document_detail(request: Request, doc_id: int):
-    return templates.TemplateResponse("document.html", {"request": request, "doc_id": doc_id})
+    return render_template("document.html", {
+        "request": request,
+        "doc_id": doc_id,
+        "query": "",
+    })
 
 
-@app.get("/folder/{folder_id}")
+@app.get("/folder/{folder_id}", response_class=HTMLResponse)
 async def folder_detail(request: Request, folder_id: int):
-    return templates.TemplateResponse("folder.html", {"request": request, "folder_id": folder_id})
+    return render_template("folder.html", {
+        "request": request,
+        "folder_id": folder_id,
+        "query": "",
+    })
 
 
-@app.get("/search")
+@app.get("/search", response_class=HTMLResponse)
 async def search_page(request: Request, q: str = ""):
-    return templates.TemplateResponse("search.html", {"request": request, "query": q})
+    return render_template("search.html", {
+        "request": request,
+        "query": q,
+    })

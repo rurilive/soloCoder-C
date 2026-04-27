@@ -2,14 +2,13 @@
 
 # 文档管理平台启动脚本
 
-set -e
-
 echo "=================================="
 echo "  文档管理平台"
 echo "=================================="
 
-# 检查端口是否被占用
 PORT=3333
+
+# 检查端口是否被占用
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo "端口 $PORT 已被占用，正在尝试停止现有服务..."
     PID=$(lsof -ti:$PORT)
@@ -28,12 +27,13 @@ echo "=================================="
 nohup uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT > app.log 2>&1 &
 PID=$!
 
+echo $PID > app.pid
+
 # 等待服务启动
 sleep 2
 
 # 检查服务是否启动成功
 if ps -p $PID > /dev/null 2>&1; then
-    echo $PID > app.pid
     echo "服务已启动成功!"
     echo "PID: $PID"
     echo "日志文件: app.log"
