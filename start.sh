@@ -8,19 +8,6 @@ echo "=================================="
 echo "  文档管理平台"
 echo "=================================="
 
-# 检查是否已存在虚拟环境
-if [ ! -d ".venv" ]; then
-    echo "正在创建虚拟环境..."
-    uv venv
-fi
-
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 安装依赖
-echo "正在安装依赖..."
-uv sync
-
 # 检查端口是否被占用
 PORT=3333
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
@@ -35,11 +22,10 @@ fi
 # 启动服务
 echo "正在启动服务 (端口: $PORT)..."
 echo "服务地址: http://0.0.0.0:$PORT"
-echo "按 Ctrl+C 停止服务"
 echo "=================================="
 
-# 后台启动并记录PID
-nohup uvicorn app.main:app --host 0.0.0.0 --port $PORT > app.log 2>&1 &
+# 使用 uv run 后台启动并记录PID
+nohup uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT > app.log 2>&1 &
 PID=$!
 
 # 等待服务启动
