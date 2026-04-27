@@ -927,6 +927,16 @@ async def upload_photo(
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
+def can_delete_photo(current_user, photo) -> bool:
+    if not current_user:
+        return False
+    if photo.user_id == current_user.id:
+        return True
+    if photo.album and photo.album.can_edit(current_user.id):
+        return True
+    return False
+
+
 @app.get("/photo/{photo_id}", response_class=HTMLResponse)
 async def photo_detail(
     photo_id: int,
@@ -953,9 +963,11 @@ async def photo_detail(
         else:
             return RedirectResponse(url="/login", status_code=303)
     
+    can_delete = can_delete_photo(current_user, photo)
+    
     return HTMLResponse(content=render_template(
         "detail.html",
-        {"request": request, "current_user": current_user, "photo": photo},
+        {"request": request, "current_user": current_user, "photo": photo, "can_delete": can_delete},
     ))
 
 
@@ -965,15 +977,15 @@ async def delete_photo(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    photo = db.query(Photo).filter(
-        Photo.id == photo_id,
-        Photo.user_id == current_user.id
-    ).first()
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
     
     if not photo:
         raise HTTPException(status_code=404, detail="图片不存在")
     
-    user_dir = get_user_upload_dir(current_user.id)
+    if not can_delete_photo(current_user, photo):
+        raise HTTPException(status_code=403, detail="您没有权限删除这张图片")
+    
+    user_dir = get_user_upload_dir(photo.user_id)
     file_path = os.path.join(user_dir, photo.filename)
     thumbnail_path = os.path.join(user_dir, "thumbnails", photo.thumbnail_filename)
     

@@ -153,3 +153,118 @@
 2026-04-26 22:06:30 - INFO - Vector search enabled with OpenAI API
 2026-04-26 22:37:43 - INFO - Vector search enabled with OpenAI API
 2026-04-26 22:38:07 - INFO - Vector search enabled with OpenAI API
+2026-04-26 23:11:39 - INFO - Vector search enabled with OpenAI API
+2026-04-26 23:12:12 - INFO - User 1 updated album 1
+2026-04-26 23:13:02 - INFO - 
+[首页搜索] 搜索完成:
+2026-04-26 23:13:02 - INFO -   - 搜索关键词: 'None'
+2026-04-26 23:13:02 - INFO -   - 搜索类型: 浏览全部
+2026-04-26 23:13:02 - INFO -   - 总结果数: 0
+2026-04-26 23:13:02 - DEBUG - ============================================================
+
+2026-04-26 23:13:19 - INFO - 
+[首页搜索] 搜索完成:
+2026-04-26 23:13:19 - INFO -   - 搜索关键词: 'None'
+2026-04-26 23:13:19 - INFO -   - 搜索类型: 浏览全部
+2026-04-26 23:13:19 - INFO -   - 总结果数: 0
+2026-04-26 23:13:19 - DEBUG - ============================================================
+
+2026-04-26 23:13:28 - INFO - User 1 updated album 1
+2026-04-26 23:13:39 - INFO - User 1 invited 3 to album 1 as viewer
+2026-04-26 23:13:53 - INFO - User 1 removed member 3 from album 1
+2026-04-26 23:14:00 - INFO - User 1 invited 3 to album 1 as editor
+2026-04-26 23:14:12 - INFO - 
+[首页搜索] 搜索完成:
+2026-04-26 23:14:12 - INFO -   - 搜索关键词: 'None'
+2026-04-26 23:14:12 - INFO -   - 搜索类型: 浏览全部
+2026-04-26 23:14:12 - INFO -   - 总结果数: 0
+2026-04-26 23:14:12 - DEBUG - ============================================================
+
+2026-04-26 23:14:31 - INFO - 
+[首页搜索] 搜索完成:
+2026-04-26 23:14:31 - INFO -   - 搜索关键词: 'None'
+2026-04-26 23:14:31 - INFO -   - 搜索类型: 浏览全部
+2026-04-26 23:14:31 - INFO -   - 总结果数: 0
+2026-04-26 23:14:31 - DEBUG - ============================================================
+
+2026-04-26 23:14:42 - DEBUG - 
+============================================================
+2026-04-26 23:14:42 - DEBUG - [add_to_vector_store] 开始添加到向量存储
+2026-04-26 23:14:42 - DEBUG - ============================================================
+2026-04-26 23:14:42 - DEBUG -   - photo_id: 9
+2026-04-26 23:14:42 - DEBUG -   - description: 'sfas'
+2026-04-26 23:14:42 - DEBUG -   - tags: 'sdfa'
+2026-04-26 23:14:42 - DEBUG -   - _embedding_enabled: True
+2026-04-26 23:14:42 - DEBUG - [add_to_vector_store] 获取 embedding_service...
+2026-04-26 23:14:42 - INFO - [EmbeddingService] 初始化...
+2026-04-26 23:14:42 - INFO -   - API Key: sk-4e...df54f
+2026-04-26 23:14:42 - INFO -   - Base URL: https://api.tokenpony.cn/v1
+2026-04-26 23:14:42 - INFO -   - Model: qwen3-embedding-4b
+2026-04-26 23:14:42 - INFO -   - Dimensions: 32
+2026-04-26 23:14:42 - DEBUG - [add_to_vector_store] ✅ 获取 embedding_service 成功
+2026-04-26 23:14:42 - DEBUG - [EmbeddingService.embed_description] description='sfas', tags='sdfa'
+2026-04-26 23:14:42 - DEBUG - [EmbeddingService.embed_description] 组合后文本: 'sfas Tags: sdfa'
+2026-04-26 23:14:42 - DEBUG - 
+============================================================
+2026-04-26 23:14:42 - DEBUG - [EmbeddingService.embed_text] 开始生成嵌入向量
+2026-04-26 23:14:42 - DEBUG - ============================================================
+2026-04-26 23:14:42 - DEBUG -   - 输入文本: 'sfas Tags: sdfa'
+2026-04-26 23:14:42 - DEBUG -   - Model: qwen3-embedding-4b
+2026-04-26 23:14:42 - DEBUG -   - 期望维度: 32
+2026-04-26 23:14:42 - DEBUG - [EmbeddingService.embed_text] 调用 OpenAI API...
+2026-04-26 23:14:44 - INFO - [EmbeddingService.embed_text] ✅ API 调用成功
+2026-04-26 23:14:44 - DEBUG -   - 返回向量维度: 2560
+2026-04-26 23:14:44 - WARNING - [EmbeddingService.embed_text] ⚠️ 向量维度不匹配!
+2026-04-26 23:14:44 - WARNING -   - 期望: 32
+2026-04-26 23:14:44 - WARNING -   - 实际: 2560
+2026-04-26 23:14:44 - DEBUG -   - 向量统计信息:
+2026-04-26 23:14:44 - DEBUG -     - min: -0.094028
+2026-04-26 23:14:44 - DEBUG -     - max: 0.088036
+2026-04-26 23:14:44 - DEBUG -     - mean: -0.000347
+2026-04-26 23:14:44 - DEBUG -     - L2 norm: 1.000000
+2026-04-26 23:14:44 - DEBUG -   - 接近零的元素数: 1/2560
+2026-04-26 23:14:44 - DEBUG - ============================================================
+
+2026-04-26 23:14:44 - INFO - [add_to_vector_store] ✅ 成功生成嵌入向量
+2026-04-26 23:14:44 - DEBUG -   - 维度: 2560
+2026-04-26 23:14:44 - DEBUG -   - 前3个值: [6.076597492210567e-05, 0.02316128835082054, 0.005703899543732405]
+2026-04-26 23:14:44 - DEBUG - [add_to_vector_store] 获取 vector_store...
+2026-04-26 23:14:44 - INFO - [VectorStore] 初始化...
+2026-04-26 23:14:44 - INFO -   - 存储路径: ./vector_store
+2026-04-26 23:14:44 - INFO -   - 元数据文件: ./vector_store/metadata.json
+2026-04-26 23:14:44 - INFO -   - 向量文件: ./vector_store/vectors.npz
+2026-04-26 23:14:44 - INFO -   - 相似度阈值: 0.1
+2026-04-26 23:14:44 - INFO -   - 最大结果数: 20
+2026-04-26 23:14:44 - DEBUG - [VectorStore._load] 开始加载数据...
+2026-04-26 23:14:44 - DEBUG - [VectorStore._load] 从 ./vector_store/metadata.json 加载元数据
+2026-04-26 23:14:44 - DEBUG - [VectorStore._load] 元数据中有 5 个条目
+2026-04-26 23:14:44 - DEBUG -     [1] photo_id=1, description='fff', tags='f'
+2026-04-26 23:14:44 - DEBUG -     [2] photo_id=2, description='fff', tags='范德萨'
+2026-04-26 23:14:44 - DEBUG -     [3] photo_id=3, description='sss', tags='s'
+2026-04-26 23:14:44 - DEBUG -     [4] photo_id=4, description='', tags='s'
+2026-04-26 23:14:44 - DEBUG -     [5] photo_id=7, description='头像', tags='头像'
+2026-04-26 23:14:44 - DEBUG - [VectorStore._load] 从 ./vector_store/vectors.npz 加载向量
+2026-04-26 23:14:44 - DEBUG -     [文本] photo_id=1, 维度=2560
+2026-04-26 23:14:44 - DEBUG -     [文本] photo_id=2, 维度=2560
+2026-04-26 23:14:44 - DEBUG -     [文本] photo_id=3, 维度=2560
+2026-04-26 23:14:44 - DEBUG -     [文本] photo_id=4, 维度=2560
+2026-04-26 23:14:44 - DEBUG -     [文本] photo_id=7, 维度=2560
+2026-04-26 23:14:44 - DEBUG - [VectorStore._load] 向量加载完成: 文本=5, 图像=0
+2026-04-26 23:14:44 - INFO - [VectorStore] 加载完成:
+2026-04-26 23:14:44 - INFO -   - 条目总数: 5
+2026-04-26 23:14:44 - INFO -   - 文本嵌入数: 5
+2026-04-26 23:14:44 - INFO -   - 图像嵌入数: 0
+2026-04-26 23:14:44 - INFO - [VectorStore.add_entry] 添加向量条目:
+2026-04-26 23:14:44 - INFO -   - photo_id: 9
+2026-04-26 23:14:44 - INFO -   - description: 'sfas'
+2026-04-26 23:14:44 - INFO -   - tags: 'sdfa'
+2026-04-26 23:14:44 - INFO -   - 文本嵌入: 有
+2026-04-26 23:14:44 - INFO -   - 图像嵌入: 无
+2026-04-26 23:14:44 - DEBUG - [VectorStore.add_entry] 保存文本嵌入，维度: 2560
+2026-04-26 23:14:44 - DEBUG - [VectorStore._save] 开始保存数据...
+2026-04-26 23:14:44 - DEBUG - [VectorStore._save] 保存元数据到 ./vector_store/metadata.json
+2026-04-26 23:14:44 - DEBUG -   - 条目数: 6
+2026-04-26 23:14:44 - DEBUG - [VectorStore._save] 保存向量到 ./vector_store/vectors.npz
+2026-04-26 23:14:44 - DEBUG -   - 向量数: 6
+2026-04-26 23:14:44 - INFO - [VectorStore.add_entry] ✅ 已保存到向量存储
+2026-04-26 23:14:44 - INFO - [add_to_vector_store] ✅ 已保存到向量存储

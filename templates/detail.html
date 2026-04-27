@@ -309,9 +309,11 @@
                     <a href="/uploads/{{ photo.user_id }}/{{ photo.filename }}" class="btn btn-primary" target="_blank">
                         🔍 查看原图
                     </a>
+                    {% if can_delete %}
                     <form action="/photo/{{ photo.id }}/delete" method="post" onsubmit="return confirm('确定要删除这张图片吗？')">
                         <button type="submit" class="btn btn-danger">🗑️ 删除图片</button>
                     </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
