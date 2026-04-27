@@ -7,6 +7,7 @@
     <button class="btn btn-secondary" onclick="goBack()">← 返回</button>
     <h2 id="document-title">加载中...</h2>
     <div class="document-actions-header">
+        <button class="btn btn-primary" id="edit-btn" onclick="showEditModal()">✏️ 编辑文档</button>
         <button class="btn btn-secondary" id="move-btn" onclick="showMoveModal()">移动文档</button>
         <button class="btn btn-danger" onclick="deleteDocument()">删除文档</button>
     </div>
@@ -215,6 +216,94 @@
             } else {
                 const error = await response.json();
                 showToast(error.detail || '移动失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    function showEditModal() {
+        if (!currentDocument) {
+            showToast('文档未加载完成，请稍后重试', 'error');
+            return;
+        }
+
+        const modalHtml = `
+            <div id="edit-modal-overlay" class="modal-overlay" onclick="closeEditModal(event)">
+                <div class="modal modal-large" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3>编辑文档</h3>
+                        <button class="modal-close" onclick="closeEditModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-form">
+                            <div class="form-group">
+                                <label for="edit-title">文档标题</label>
+                                <input type="text" id="edit-title" class="form-input" 
+                                       value="${escapeHtml(currentDocument.title)}" placeholder="输入文档标题">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-content">文档内容</label>
+                                <textarea id="edit-content" class="form-textarea" 
+                                          placeholder="输入文档内容...">${escapeHtml(currentDocument.content || '')}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-html-content">HTML内容 (可选)</label>
+                                <textarea id="edit-html-content" class="form-textarea" 
+                                          placeholder="输入HTML内容...">${escapeHtml(currentDocument.html_content || '')}</textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+                        <button type="button" class="btn btn-primary" onclick="submitEditForm()">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    function closeEditModal(event) {
+        if (!event || event.target === event.currentTarget) {
+            const overlay = document.getElementById('edit-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+    }
+
+    async function submitEditForm() {
+        const title = document.getElementById('edit-title').value.trim();
+        const content = document.getElementById('edit-content').value;
+        const htmlContent = document.getElementById('edit-html-content').value;
+        
+        if (!title) {
+            showToast('请输入文档标题', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: title,
+                    content: content,
+                    html_content: htmlContent
+                })
+            });
+
+            if (response.ok) {
+                showToast('文档保存成功', 'success');
+                closeEditModal();
+                loadDocument();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '保存失败', 'error');
             }
         } catch (error) {
             showToast('网络错误', 'error');

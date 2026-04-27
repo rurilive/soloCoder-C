@@ -224,26 +224,30 @@ def parse_doc(file_path: str) -> tuple[str, str]:
     """
     file_path = Path(file_path)
     
-    if is_docx_file(str(file_path)):
-        return parse_docx(str(file_path))
-    
-    elif is_doc_file(str(file_path)):
-        text, html = parse_old_doc(str(file_path))
-        if text and len(text.strip()) > 10:
-            return text, html
-        else:
-            return f"[旧版Word文档 (.doc) - 部分内容可能无法完全提取]", "<p><em>旧版Word文档 (.doc) - 部分内容可能无法完全提取</em></p>"
-    
-    else:
-        try:
+    try:
+        if is_docx_file(str(file_path)):
             return parse_docx(str(file_path))
-        except BadZipFile:
+        
+        elif is_doc_file(str(file_path)):
+            text, html = parse_old_doc(str(file_path))
+            if text and len(text.strip()) > 10:
+                return text, html
+            else:
+                return f"[旧版Word文档 (.doc) - 部分内容可能无法完全提取]", "<p><em>旧版Word文档 (.doc) - 部分内容可能无法完全提取</em></p>"
+        
+        else:
             try:
-                if olefile.isOleFile(str(file_path)):
-                    text, html = parse_old_doc(str(file_path))
-                    if text and len(text.strip()) > 10:
-                        return text, html
-            except:
-                pass
-            
-            return f"[不支持的Word文档格式]", "<p><em>不支持的Word文档格式</em></p>"
+                return parse_docx(str(file_path))
+            except BadZipFile:
+                try:
+                    if olefile.isOleFile(str(file_path)):
+                        text, html = parse_old_doc(str(file_path))
+                        if text and len(text.strip()) > 10:
+                            return text, html
+                except:
+                    pass
+                
+                return f"[不支持的Word文档格式]", "<p><em>不支持的Word文档格式</em></p>"
+    except Exception as e:
+        print(f"Error parsing Word document: {e}")
+        return f"[文档解析错误: {str(e)}]", f"<p><em>文档解析错误: {str(e)}</em></p>"
