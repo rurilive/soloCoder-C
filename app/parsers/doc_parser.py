@@ -574,19 +574,7 @@ def parse_old_doc(file_path: str) -> tuple[str, str]:
                 if len(text) > 10:
                     text = _clean_word_text(text)
                     if _is_highly_likely_valid_text(text):
-                        paragraphs = text.split('\n\n')
-                        
-                        html_parts = []
-                        for para in paragraphs:
-                            para = para.strip()
-                            if para:
-                                if len(para) < 100 and not para.endswith(('.', '。', '!', '！', '?', '？')):
-                                    html_parts.append(f"<h3>{para}</h3>")
-                                else:
-                                    html_parts.append(f"<p>{para}</p>")
-                        
-                        html_content = "\n".join(html_parts)
-                        
+                        html_content = _convert_text_to_html(text)
                         return text, html_content
                     elif _is_likely_valid_text(text):
                         pass
@@ -603,18 +591,7 @@ def parse_old_doc(file_path: str) -> tuple[str, str]:
     if not text or not _is_likely_valid_text(text):
         return "[旧版Word文档 (.doc) - 无法提取有效内容]", "<p><em>旧版Word文档 (.doc) - 无法提取有效内容</em></p>"
     
-    paragraphs = text.split('\n\n')
-    
-    html_parts = []
-    for para in paragraphs:
-        para = para.strip()
-        if para:
-            if len(para) < 100 and not para.endswith(('.', '。', '!', '！', '?', '？')):
-                html_parts.append(f"<h3>{para}</h3>")
-            else:
-                html_parts.append(f"<p>{para}</p>")
-    
-    html_content = "\n".join(html_parts)
+    html_content = _convert_text_to_html(text)
     
     return text, html_content
 
