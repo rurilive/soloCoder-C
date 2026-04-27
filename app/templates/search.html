@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}搜索{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 id="search-title">搜索结果</h2>
+</div>
+
+<div class="content-section">
+    <div id="search-results">
+        <div class="loading">搜索中...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const query = "{{ query|escapejs }}";
+
+    async function performSearch() {
+        if (!query || query.trim() === '') {
+            document.getElementById('search-results').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>请输入搜索关键词</h3>
+                    <p>在顶部搜索框中输入关键词搜索文档和文件夹</p>
+                </div>
+            `;
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            
+            document.getElementById('search-title').textContent = `搜索 "${query}" (${data.total} 个结果)`;
+            document.title = `搜索 "${query}" - 文档管理平台`;
+            
+            renderSearchResults(data.results);
+        } catch (error) {
+            console.error('搜索失败:', error);
+            document.getElementById('search-results').innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">❌</div>
+                    <h3>搜索失败</h3>
+                    <p>${error.message}</p>
+                </div>
+            `;
+        }
+    }
+
+    function renderSearchResults(results) {
+        const documents = results.documents || [];
+        const folders = results.folders || [];
+        
+        if (documents.length === 0 && folders.length === 0) {
+            document.getElementById('search-results').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>未找到结果</h3>
+                    <p>尝试使用其他关键词搜索</p>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        
+        if (folders.length > 0) {
+            html += `
+                <div class="search-section">
+                    <h3>📁 文件夹 (${folders.length})</h3>
+                    <div class="folder-grid">
+            `;
+            
+            folders.forEach(folder => {
+                html += `
+                    <div class="folder-card" onclick="goToFolder(${folder.id})">
+                        <div class="folder-icon">📁</div>
+                        <div class="folder-info">
+                            <h4 class="folder-name" title="${folder.name}">${highlightMatch(folder.name, query)}</h4>
+                            <p class="folder-meta">
+                                ${folder.parent_id ? `父文件夹 ID: ${folder.parent_id}` : '根目录'}
+                            </p>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div></div>`;
+        }
+        
+        if (documents.length > 0) {
+            html += `
+                <div class="search-section">
+                    <h3>📄 文档 (${documents.length})</h3>
+                    <div class="document-grid">
+            `;
+            
+            documents.forEach(doc => {
+                const icon = getFileTypeIcon(doc.file_type);
+                html += `
+                    <div class="document-card" onclick="goToDocument(${doc.id})">
+                        <div class="document-icon">${icon}</div>
+                        <div class="document-info">
+                            <h4 class="document-title" title="${doc.title}">${highlightMatch(doc.title, query)}</h4>
+                            <p class="document-meta">
+                                <span class="document-type">${doc.file_type.toUpperCase()}</span>
+                                <span class="document-date">${formatDate(doc.created_at)}</span>
+                            </p>
+                            ${doc.snippet ? `<p class="document-snippet">${highlightMatch(doc.snippet, query)}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div></div>`;
+        }
+        
+        document.getElementById('search-results').innerHTML = html;
+    }
+
+    function highlightMatch(text, query) {
+        if (!text || !query) return text;
+        
+        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+        return text.replace(regex, '<mark>$1</mark>');
+    }
+
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function getFileTypeIcon(fileType) {
+        const icons = {
+            'markdown': '📝',
+            'doc': '📃',
+            'excel': '📊',
+            'ppt': '📽️'
+        };
+        return icons[fileType] || '📄';
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('zh-CN');
+    }
+
+    function goToFolder(folderId) {
+        window.location.href = `/folder/${folderId}`;
+    }
+
+    function goToDocument(docId) {
+        window.location.href = `/document/${docId}`;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        performSearch();
+    });
+</script>
+{% endblock %}

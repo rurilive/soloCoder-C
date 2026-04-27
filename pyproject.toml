@@ -1,0 +1,30 @@
+[project]
+name = "document-platform"
+version = "0.1.0"
+description = "文档管理平台，支持上传解析Markdown、doc、excel、ppt文件，自动生成层级文档站"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "sqlalchemy>=2.0.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.6",
+    "python-docx>=0.8.11",
+    "openpyxl>=3.1.0",
+    "python-pptx>=0.6.21",
+    "markdown>=3.4.0",
+    "aiofiles>=23.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]

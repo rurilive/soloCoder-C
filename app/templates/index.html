@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}文档管理平台{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>📁 文档库</h2>
+</div>
+
+<div class="content-section">
+    <h3>最近文档</h3>
+    <div id="documents-list" class="documents-list">
+        <div class="loading">加载中...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadDocuments() {
+        try {
+            const response = await fetch('/api/documents/');
+            const data = await response.json();
+            const documentsList = document.getElementById('documents-list');
+            
+            if (data.documents.length === 0) {
+                documentsList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📄</div>
+                        <h3>暂无文档</h3>
+                        <p>从左侧上传文档开始使用</p>
+                    </div>
+                `;
+            } else {
+                documentsList.innerHTML = renderDocuments(data.documents);
+            }
+        } catch (error) {
+            console.error('加载文档失败:', error);
+            document.getElementById('documents-list').innerHTML = '<div class="error-message">加载失败</div>';
+        }
+    }
+
+    function renderDocuments(documents) {
+        let html = '<div class="document-grid">';
+        documents.forEach(doc => {
+            const icon = getFileTypeIcon(doc.file_type);
+            html += `
+                <div class="document-card" onclick="goToDocument(${doc.id})">
+                    <div class="document-icon">${icon}</div>
+                    <div class="document-info">
+                        <h4 class="document-title" title="${doc.title}">${doc.title}</h4>
+                        <p class="document-meta">
+                            <span class="document-type">${doc.file_type.toUpperCase()}</span>
+                            <span class="document-date">${formatDate(doc.created_at)}</span>
+                        </p>
+                    </div>
+                    <div class="document-actions">
+                        <button class="action-btn" onclick="event.stopPropagation(); deleteDocument(${doc.id})" title="删除">🗑️</button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function getFileTypeIcon(fileType) {
+        const icons = {
+            'markdown': '📝',
+            'doc': '📃',
+            'excel': '📊',
+            'ppt': '📽️'
+        };
+        return icons[fileType] || '📄';
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('zh-CN');
+    }
+
+    function goToDocument(docId) {
+        window.location.href = `/document/${docId}`;
+    }
+
+    async function deleteDocument(docId) {
+        if (!confirm('确定要删除此文档吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/documents/${docId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showToast('文档删除成功', 'success');
+                loadDocuments();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDocuments();
+    });
+</script>
+{% endblock %}

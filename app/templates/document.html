@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}{{ doc_id }} - 文档详情{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <button class="btn btn-secondary" onclick="goBack()">← 返回</button>
+    <h2 id="document-title">加载中...</h2>
+    <div class="document-actions-header">
+        <button class="btn btn-secondary" id="move-btn" onclick="showMoveModal()">移动文档</button>
+        <button class="btn btn-danger" onclick="deleteDocument()">删除文档</button>
+    </div>
+</div>
+
+<div class="content-section">
+    <div id="document-meta" class="document-meta-info">
+        加载中...
+    </div>
+    
+    <div id="document-content" class="document-content">
+        <div class="loading">加载中...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentDocId = {{ doc_id }};
+    let currentDocument = null;
+
+    async function loadDocument() {
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}`);
+            
+            if (!response.ok) {
+                throw new Error('文档不存在');
+            }
+            
+            currentDocument = await response.json();
+            
+            document.getElementById('document-title').textContent = currentDocument.title;
+            document.title = `${currentDocument.title} - 文档管理平台`;
+            
+            const metaInfo = document.getElementById('document-meta');
+            metaInfo.innerHTML = `
+                <div class="meta-row">
+                    <span class="meta-label">文件名:</span>
+                    <span class="meta-value">${currentDocument.filename}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">文件类型:</span>
+                    <span class="meta-value">${currentDocument.file_type.toUpperCase()}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">创建时间:</span>
+                    <span class="meta-value">${formatDateTime(currentDocument.created_at)}</span>
+                </div>
+                ${currentDocument.updated_at ? `
+                <div class="meta-row">
+                    <span class="meta-label">更新时间:</span>
+                    <span class="meta-value">${formatDateTime(currentDocument.updated_at)}</span>
+                </div>
+                ` : ''}
+            `;
+            
+            const contentDiv = document.getElementById('document-content');
+            if (currentDocument.html_content) {
+                contentDiv.innerHTML = currentDocument.html_content;
+            } else if (currentDocument.content) {
+                contentDiv.innerHTML = `<pre>${escapeHtml(currentDocument.content)}</pre>`;
+            } else {
+                contentDiv.innerHTML = '<div class="empty-message">此文档暂无内容</div>';
+            }
+        } catch (error) {
+            console.error('加载文档失败:', error);
+            document.getElementById('document-content').innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">❌</div>
+                    <h3>加载失败</h3>
+                    <p>${error.message}</p>
+                    <button class="btn btn-primary" onclick="window.location.href='/'">返回首页</button>
+                </div>
+            `;
+        }
+    }
+
+    function formatDateTime(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleString('zh-CN');
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function goBack() {
+        if (document.referrer && document.referrer !== window.location.href) {
+            window.history.back();
+        } else {
+            window.location.href = '/';
+        }
+    }
+
+    async function deleteDocument() {
+        if (!confirm('确定要删除此文档吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showToast('文档删除成功', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    function showMoveModal() {
+        const modalHtml = `
+            <div id="move-modal-overlay" class="modal-overlay" onclick="closeMoveModal(event)">
+                <div class="modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3>移动文档</h3>
+                        <button class="modal-close" onclick="closeMoveModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="move-form">
+                            <div class="form-group">
+                                <label for="target-folder">目标文件夹</label>
+                                <select id="target-folder" class="form-select">
+                                    <option value="0">根目录</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeMoveModal()">取消</button>
+                        <button type="button" class="btn btn-primary" onclick="submitMoveForm()">确定</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        loadFoldersForMove();
+    }
+
+    async function loadFoldersForMove() {
+        try {
+            const response = await fetch('/api/folders/tree');
+            const data = await response.json();
+            const select = document.getElementById('target-folder');
+            
+            let optionsHtml = '<option value="0">根目录</option>';
+            optionsHtml += renderFolderOptions(data.folders, 0);
+            select.innerHTML = optionsHtml;
+            
+            if (currentDocument && currentDocument.folder_id) {
+                select.value = currentDocument.folder_id;
+            }
+        } catch (error) {
+            console.error('加载文件夹失败:', error);
+        }
+    }
+
+    function renderFolderOptions(folders, level) {
+        let html = '';
+        const prefix = '　'.repeat(level);
+        
+        folders.forEach(folder => {
+            html += `<option value="${folder.id}">${prefix}📁 ${folder.name}</option>`;
+            if (folder.children && folder.children.length > 0) {
+                html += renderFolderOptions(folder.children, level + 1);
+            }
+        });
+        
+        return html;
+    }
+
+    function closeMoveModal(event) {
+        if (!event || event.target === event.currentTarget) {
+            const overlay = document.getElementById('move-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+    }
+
+    async function submitMoveForm() {
+        const folderId = document.getElementById('target-folder').value;
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/move/${folderId}`, {
+                method: 'PUT'
+            });
+
+            if (response.ok) {
+                showToast('文档移动成功', 'success');
+                closeMoveModal();
+                loadFolderTree();
+                loadDocument();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '移动失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDocument();
+    });
+</script>
+{% endblock %}

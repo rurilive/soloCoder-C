@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}文件夹{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <button class="btn btn-secondary" onclick="goBack()">← 返回</button>
+    <div id="breadcrumb" class="breadcrumb">
+        <a href="/">首页</a>
+    </div>
+    <div class="document-actions-header">
+        <button class="btn btn-secondary" onclick="showCreateFolderModal(currentFolderId)">
+            ➕ 新建子文件夹
+        </button>
+        <button class="btn btn-secondary" onclick="showEditFolderModal(currentFolderId, currentFolderName)">
+            ✏️ 重命名
+        </button>
+        <button class="btn btn-danger" onclick="deleteCurrentFolder()">
+            🗑️ 删除
+        </button>
+    </div>
+</div>
+
+<div class="content-section">
+    <h3 id="folder-title">加载中...</h3>
+    
+    <div id="subfolders-section" class="subfolders-section" style="display: none;">
+        <h4>子文件夹</h4>
+        <div id="subfolders-list" class="folder-grid">
+        </div>
+    </div>
+    
+    <div id="documents-section" class="documents-section">
+        <h4>文档</h4>
+        <div id="documents-list" class="document-grid">
+            <div class="loading">加载中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentFolderId = {{ folder_id }};
+    let currentFolderName = '';
+    let currentFolderData = null;
+
+    async function loadFolder() {
+        try {
+            const response = await fetch(`/api/folders/${currentFolderId}`);
+            
+            if (!response.ok) {
+                throw new Error('文件夹不存在');
+            }
+            
+            currentFolderData = await response.json();
+            currentFolderName = currentFolderData.name;
+            
+            document.getElementById('folder-title').textContent = `📁 ${currentFolderData.name}`;
+            document.title = `${currentFolderData.name} - 文档管理平台`;
+            
+            await loadBreadcrumb();
+            
+            if (currentFolderData.children && currentFolderData.children.length > 0) {
+                document.getElementById('subfolders-section').style.display = 'block';
+                document.getElementById('subfolders-list').innerHTML = renderFolders(currentFolderData.children);
+            } else {
+                document.getElementById('subfolders-section').style.display = 'none';
+            }
+            
+            if (currentFolderData.documents && currentFolderData.documents.length > 0) {
+                document.getElementById('documents-list').innerHTML = renderDocuments(currentFolderData.documents);
+            } else {
+                document.getElementById('documents-list').innerHTML = `
+                    <div class="empty-state small">
+                        <div class="empty-icon">📄</div>
+                        <p>此文件夹暂无文档</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('加载文件夹失败:', error);
+            document.getElementById('documents-list').innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">❌</div>
+                    <h3>加载失败</h3>
+                    <p>${error.message}</p>
+                    <button class="btn btn-primary" onclick="window.location.href='/'">返回首页</button>
+                </div>
+            `;
+        }
+    }
+
+    async function loadBreadcrumb() {
+        const breadcrumb = document.getElementById('breadcrumb');
+        let html = '<a href="/">首页</a>';
+        
+        const parentIds = await getParentFolders(currentFolderId);
+        
+        for (const parent of parentIds.reverse()) {
+            html += ` › <a href="/folder/${parent.id}">${parent.name}</a>`;
+        }
+        
+        breadcrumb.innerHTML = html;
+    }
+
+    async function getParentFolders(folderId) {
+        const parents = [];
+        let currentId = folderId;
+        
+        while (currentId) {
+            try {
+                const response = await fetch(`/api/folders/${currentId}`);
+                if (response.ok) {
+                    const folder = await response.json();
+                    if (folder.parent_id) {
+                        parents.push({ id: folder.id, name: folder.name });
+                        currentId = folder.parent_id;
+                    } else {
+                        parents.push({ id: folder.id, name: folder.name });
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } catch (error) {
+                break;
+            }
+        }
+        
+        return parents.slice(0, -1);
+    }
+
+    function renderFolders(folders) {
+        let html = '';
+        folders.forEach(folder => {
+            html += `
+                <div class="folder-card" onclick="goToFolder(${folder.id})">
+                    <div class="folder-icon">📁</div>
+                    <div class="folder-info">
+                        <h4 class="folder-name" title="${folder.name}">${folder.name}</h4>
+                        <p class="folder-count">${folder.document_count} 个文档, ${folder.children.length} 个子文件夹</p>
+                    </div>
+                </div>
+            `;
+        });
+        return html;
+    }
+
+    function renderDocuments(documents) {
+        let html = '';
+        documents.forEach(doc => {
+            const icon = getFileTypeIcon(doc.file_type);
+            html += `
+                <div class="document-card" onclick="goToDocument(${doc.id})">
+                    <div class="document-icon">${icon}</div>
+                    <div class="document-info">
+                        <h4 class="document-title" title="${doc.title}">${doc.title}</h4>
+                        <p class="document-meta">
+                            <span class="document-type">${doc.file_type.toUpperCase()}</span>
+                            <span class="document-date">${formatDate(doc.created_at)}</span>
+                        </p>
+                    </div>
+                    <div class="document-actions">
+                        <button class="action-btn" onclick="event.stopPropagation(); deleteDocument(${doc.id})" title="删除">🗑️</button>
+                    </div>
+                </div>
+            `;
+        });
+        return html;
+    }
+
+    function getFileTypeIcon(fileType) {
+        const icons = {
+            'markdown': '📝',
+            'doc': '📃',
+            'excel': '📊',
+            'ppt': '📽️'
+        };
+        return icons[fileType] || '📄';
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('zh-CN');
+    }
+
+    function goToFolder(folderId) {
+        window.location.href = `/folder/${folderId}`;
+    }
+
+    function goToDocument(docId) {
+        window.location.href = `/document/${docId}`;
+    }
+
+    function goBack() {
+        if (currentFolderData && currentFolderData.parent_id) {
+            window.location.href = `/folder/${currentFolderData.parent_id}`;
+        } else {
+            window.location.href = '/';
+        }
+    }
+
+    async function deleteCurrentFolder() {
+        if (!confirm('确定要删除此文件夹吗？子文件夹和文档也会被删除。')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/folders/${currentFolderId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showToast('文件夹删除成功', 'success');
+                setTimeout(() => {
+                    if (currentFolderData && currentFolderData.parent_id) {
+                        window.location.href = `/folder/${currentFolderData.parent_id}`;
+                    } else {
+                        window.location.href = '/';
+                    }
+                }, 1000);
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    async function deleteDocument(docId) {
+        if (!confirm('确定要删除此文档吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/documents/${docId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showToast('文档删除成功', 'success');
+                loadFolder();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadFolder();
+    });
+</script>
+{% endblock %}
