@@ -16,6 +16,7 @@ dependencies = [
     "aiofiles>=23.1.0",
     "olefile>=0.47",
     "pyantiword>=0.1.2",
+    "chardet>=7.4.3",
 ]
 
 [project.optional-dependencies]
