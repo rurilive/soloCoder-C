@@ -8,6 +8,7 @@
     <h2 id="document-title">加载中...</h2>
     <div class="document-actions-header">
         <button class="btn btn-primary" id="edit-btn" onclick="showEditModal()">✏️ 编辑文档</button>
+        <button class="btn btn-secondary" id="reparse-btn" onclick="reparseDocument()">🔄 重新解析</button>
         <button class="btn btn-secondary" id="move-btn" onclick="showMoveModal()">移动文档</button>
         <button class="btn btn-danger" onclick="deleteDocument()">删除文档</button>
     </div>
@@ -305,6 +306,36 @@
                 const error = await response.json();
                 showToast(error.detail || '保存失败', 'error');
             }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    async function reparseDocument() {
+        if (!confirm('确定要重新解析此文档吗？这将使用最新的解析器重新提取文档内容。')) {
+            return;
+        }
+
+        try {
+            const reparseBtn = document.getElementById('reparse-btn');
+            const originalText = reparseBtn.textContent;
+            reparseBtn.textContent = '解析中...';
+            reparseBtn.disabled = true;
+
+            const response = await fetch(`/api/documents/${currentDocId}/reparse`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                showToast('文档重新解析成功', 'success');
+                loadDocument();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '重新解析失败', 'error');
+            }
+
+            reparseBtn.textContent = originalText;
+            reparseBtn.disabled = false;
         } catch (error) {
             showToast('网络错误', 'error');
         }

@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
+from pathlib import Path
 
 from app.database import get_db
 from app.models import Document, Folder
+from app.utils import parse_file, get_file_type
 
 router = APIRouter()
 
@@ -158,3 +160,47 @@ async def update_document(
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
         "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
     }
+
+
+@router.post("/{doc_id}/reparse")
+async def reparse_document(
+    doc_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    重新解析文档内容
+    用于当解析器更新后，重新解析已上传的文档
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在，无法重新解析")
+    
+    try:
+        file_type = doc.file_type
+        content, html_content = parse_file(str(file_path), file_type)
+        
+        if content or html_content:
+            doc.content = content
+            doc.html_content = html_content
+            db.commit()
+            db.refresh(doc)
+            
+            return {
+                "id": doc.id,
+                "title": doc.title,
+                "filename": doc.filename,
+                "file_type": doc.file_type,
+                "content": doc.content,
+                "html_content": doc.html_content,
+                "message": "文档重新解析成功"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="重新解析失败，无法提取内容")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重新解析失败: {str(e)}")

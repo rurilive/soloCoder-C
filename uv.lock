@@ -84,6 +84,7 @@ dependencies = [
     { name = "markdown" },
     { name = "olefile" },
     { name = "openpyxl" },
+    { name = "pyantiword" },
     { name = "python-docx" },
     { name = "python-multipart" },
     { name = "python-pptx" },
@@ -105,6 +106,7 @@ requires-dist = [
     { name = "markdown", specifier = ">=3.4.0" },
     { name = "olefile", specifier = ">=0.47" },
     { name = "openpyxl", specifier = ">=3.1.0" },
+    { name = "pyantiword", specifier = ">=0.1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "python-docx", specifier = ">=0.8.11" },
@@ -635,6 +637,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "pyantiword"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/ac/42b884dfc042459cb056172b39afe005c9f17f9a85fdd608e6e8518f52f0/pyantiword-0.1.2.tar.gz", hash = "sha256:4e64b1994b4e059ed8bbf25b49880df4d761e515a3b6fa0934023d325cb33eb3", size = 144571, upload-time = "2025-06-20T14:21:48.779Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/72/319d8589e8f93e654bcbb26d8b5391767f4ef347681bb90467adee191dc9/pyantiword-0.1.2-py3-none-any.whl", hash = "sha256:da2f8810f14b4f48ca7fd95e8580cb057b0a30147b4f33bb48d12f0a97069b6b", size = 208519, upload-time = "2025-06-20T14:21:47.034Z" },
 ]
 
 [[package]]

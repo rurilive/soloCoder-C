@@ -5,6 +5,12 @@ import olefile
 import struct
 import re
 
+try:
+    from pyantiword.antiword_wrapper import extract_text as antiword_extract_text
+    HAS_ANTIWORD = True
+except ImportError:
+    HAS_ANTIWORD = False
+
 
 def is_docx_file(file_path: str) -> bool:
     """
@@ -100,6 +106,8 @@ def extract_text_from_doc(file_path: str) -> str:
         
         ole.close()
         
+        extracted_texts = []
+        
         try:
             fc_min = struct.unpack('<I', word_data[0x18:0x1C])[0]
             fc_max = struct.unpack('<I', word_data[0x1C:0x20])[0]
@@ -107,38 +115,97 @@ def extract_text_from_doc(file_path: str) -> str:
             if 0 < fc_min < fc_max <= len(word_data):
                 text_content = word_data[fc_min:fc_max]
                 
-                encoding = 'utf-16-le' if _is_unicode_word(word_data) else 'latin-1'
+                encodings_to_try = [
+                    'utf-16-le',
+                    'utf-16-be',
+                    'gbk',
+                    'gb2312',
+                    'gb18030',
+                    'big5',
+                    'shift_jis',
+                    'euc-jp',
+                    'euc-kr',
+                    'latin-1',
+                    'cp1252',
+                ]
                 
-                try:
-                    text = text_content.decode(encoding, errors='ignore')
-                    text = _clean_word_text(text)
+                for encoding in encodings_to_try:
+                    try:
+                        text = text_content.decode(encoding, errors='ignore')
+                        cleaned_text = _clean_word_text(text)
+                        if cleaned_text and len(cleaned_text.strip()) > 20:
+                            if _is_likely_valid_text(cleaned_text):
+                                extracted_texts.append(cleaned_text)
+                    except:
+                        continue
+        except:
+            pass
+        
+        for encoding in ['utf-16-le', 'utf-16-be', 'gbk', 'gb2312', 'gb18030', 'big5', 'latin-1', 'cp1252']:
+            try:
+                text = word_data.decode(encoding, errors='ignore')
+                cleaned_text = _clean_word_text(text)
+                if cleaned_text and len(cleaned_text.strip()) > 20:
+                    if _is_likely_valid_text(cleaned_text):
+                        extracted_texts.append(cleaned_text)
+            except:
+                continue
+        
+        simple_text = extract_simple_text(word_data)
+        if simple_text and len(simple_text.strip()) > 20:
+            if _is_likely_valid_text(simple_text):
+                extracted_texts.append(simple_text)
+        
+        if extracted_texts:
+            extracted_texts.sort(key=lambda x: len(x), reverse=True)
+            for text in extracted_texts:
+                if _is_likely_valid_text(text):
                     return text
-                except:
-                    pass
-        except:
-            pass
+            
+            return extracted_texts[0]
         
-        try:
-            text = word_data.decode('utf-16-le', errors='ignore')
-            text = _clean_word_text(text)
-            if len(text.strip()) > 10:
-                return text
-        except:
-            pass
-        
-        try:
-            text = word_data.decode('latin-1', errors='ignore')
-            text = _clean_word_text(text)
-            if len(text.strip()) > 10:
-                return text
-        except:
-            pass
-        
-        return extract_simple_text(word_data)
+        return ""
         
     except Exception as e:
         print(f"Error extracting text from .doc file: {e}")
         return ""
+
+
+def _is_likely_valid_text(text: str) -> bool:
+    """
+    检测文本是否可能是有效的可读文本
+    """
+    if not text or len(text.strip()) < 10:
+        return False
+    
+    total_chars = len(text)
+    if total_chars == 0:
+        return False
+    
+    printable_chars = sum(1 for c in text if c.isprintable() or c in '\n\r\t ')
+    printable_ratio = printable_chars / total_chars
+    
+    if printable_ratio < 0.6:
+        return False
+    
+    ascii_chars = sum(1 for c in text if ord(c) < 128)
+    ascii_ratio = ascii_chars / total_chars
+    
+    if ascii_ratio > 0.3:
+        common_words = ['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'has', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'own', 'say', 'she', 'too', 'use']
+        text_lower = text.lower()
+        for word in common_words:
+            if f' {word} ' in text_lower or text_lower.startswith(f'{word} ') or text_lower.endswith(f' {word}'):
+                return True
+    
+    chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    if chinese_chars > 5:
+        return True
+    
+    if text.count(' ') > len(text) * 0.05 and text.count('\n') > 0:
+        return True
+    
+    return False
 
 
 def parse_docx(file_path: str) -> tuple[str, str]:
@@ -194,7 +261,35 @@ def parse_docx(file_path: str) -> tuple[str, str]:
 def parse_old_doc(file_path: str) -> tuple[str, str]:
     """
     解析旧版 .doc 文件（OLE格式）
+    优先使用 pyantiword，如果失败则使用自定义解析逻辑
     """
+    text = ""
+    
+    if HAS_ANTIWORD:
+        try:
+            text = antiword_extract_text(file_path)
+            if text:
+                text = text.strip()
+                if len(text) > 10:
+                    text = _clean_word_text(text)
+                    if _is_likely_valid_text(text):
+                        paragraphs = text.split('\n\n')
+                        
+                        html_parts = []
+                        for para in paragraphs:
+                            para = para.strip()
+                            if para:
+                                if len(para) < 100 and not para.endswith(('.', '。', '!', '！', '?', '？')):
+                                    html_parts.append(f"<h3>{para}</h3>")
+                                else:
+                                    html_parts.append(f"<p>{para}</p>")
+                        
+                        html_content = "\n".join(html_parts)
+                        
+                        return text, html_content
+        except Exception as e:
+            print(f"Error using pyantiword: {e}, falling back to custom parser")
+    
     text = extract_text_from_doc(file_path)
     
     if not text or len(text.strip()) < 10:
