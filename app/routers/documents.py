@@ -176,19 +176,42 @@ async def reparse_document(
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
     
+    print(f"[REPARSE DEBUG] 开始重新解析文档 ID: {doc_id}")
+    print(f"[REPARSE DEBUG] 文档标题: {doc.title}")
+    print(f"[REPARSE DEBUG] 文件名: {doc.filename}")
+    print(f"[REPARSE DEBUG] 文件类型: {doc.file_type}")
+    print(f"[REPARSE DEBUG] 文件路径: {doc.file_path}")
+    
     file_path = Path(doc.file_path)
     if not file_path.exists():
+        print(f"[REPARSE DEBUG] 文件不存在: {file_path}")
         raise HTTPException(status_code=404, detail="原始文件不存在，无法重新解析")
+    
+    print(f"[REPARSE DEBUG] 文件存在，开始解析...")
     
     try:
         file_type = doc.file_type
+        print(f"[REPARSE DEBUG] 调用 parse_file, file_type={file_type}")
+        
         content, html_content = parse_file(str(file_path), file_type)
+        
+        print(f"[REPARSE DEBUG] 解析完成")
+        print(f"[REPARSE DEBUG] content长度: {len(content) if content else 0}")
+        print(f"[REPARSE DEBUG] html_content长度: {len(html_content) if html_content else 0}")
+        
+        if content:
+            print(f"[REPARSE DEBUG] content前200字符: {content[:200] if len(content) > 200 else content}")
+        
+        if html_content:
+            print(f"[REPARSE DEBUG] html_content前200字符: {html_content[:200] if len(html_content) > 200 else html_content}")
         
         if content or html_content:
             doc.content = content
             doc.html_content = html_content
             db.commit()
             db.refresh(doc)
+            
+            print(f"[REPARSE DEBUG] 数据库更新成功")
             
             return {
                 "id": doc.id,
@@ -200,7 +223,11 @@ async def reparse_document(
                 "message": "文档重新解析成功"
             }
         else:
+            print(f"[REPARSE DEBUG] 解析结果为空")
             raise HTTPException(status_code=500, detail="重新解析失败，无法提取内容")
             
     except Exception as e:
+        print(f"[REPARSE DEBUG] 异常: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"重新解析失败: {str(e)}")
