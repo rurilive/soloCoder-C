@@ -5,28 +5,51 @@ import olefile
 import struct
 import re
 import chardet
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('doc_parser')
 
 try:
     from pyantiword.antiword_wrapper import extract_text_with_antiword as antiword_extract_text
     HAS_ANTIWORD = True
-except ImportError:
+    logger.info("✅ pyantiword 已导入，函数: extract_text_with_antiword")
+except ImportError as e:
     HAS_ANTIWORD = False
+    logger.warning(f"⚠️ pyantiword 导入失败: {e}")
+
+try:
+    import mammoth
+    HAS_MAMMOTH = True
+    logger.info("✅ mammoth 已导入，可以更好地解析 docx 格式")
+except ImportError as e:
+    HAS_MAMMOTH = False
+    logger.warning(f"⚠️ mammoth 导入失败: {e}，将使用 python-docx 作为备选")
 
 
 def is_docx_file(file_path: str) -> bool:
     """
     检测文件是否是 .docx 格式（Open XML/ZIP格式）
     """
+    logger.debug(f"[is_docx_file] 检查文件: {file_path}")
     with open(file_path, 'rb') as f:
         header = f.read(4)
-        return header == b'PK\x03\x04'
+        result = header == b'PK\x03\x04'
+        logger.debug(f"[is_docx_file] 文件头: {header}, 结果: {result}")
+        return result
 
 
 def is_doc_file(file_path: str) -> bool:
     """
     检测文件是否是旧版 .doc 格式（OLE格式）
     """
-    return olefile.isOleFile(file_path)
+    logger.debug(f"[is_doc_file] 检查文件: {file_path}")
+    result = olefile.isOleFile(file_path)
+    logger.debug(f"[is_doc_file] 结果: {result}")
+    return result
 
 
 def _is_unicode_word(word_data: bytes) -> bool:
@@ -51,6 +74,7 @@ def _detect_encoding(data: bytes) -> str:
         result = chardet.detect(data)
         if result and result['encoding']:
             confidence = result.get('confidence', 0)
+            logger.debug(f"[_detect_encoding] 检测到编码: {result['encoding']}, 置信度: {confidence}")
             if confidence > 0.5:
                 return result['encoding']
     except:
@@ -66,13 +90,17 @@ def _clean_word_text(text: str) -> str:
     if not text:
         return ""
     
+    logger.debug(f"[_clean_word_text] 清理前长度: {len(text)}")
+    
     text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
     text = re.sub(r'\x0D\x0A|\x0D|\x0A', '\n', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     text = re.sub(r' {2,}', ' ', text)
     text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', text)
     
-    return text.strip()
+    result = text.strip()
+    logger.debug(f"[_clean_word_text] 清理后长度: {len(result)}")
+    return result
 
 
 def _is_highly_likely_valid_text(text: str) -> bool:
@@ -132,7 +160,8 @@ def _is_highly_likely_valid_text(text: str) -> bool:
         return True
     
     if english_letters > 50:
-        common_words = ['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'has', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'own', 'say', 'she', 'too', 'use', 'with', 'have', 'this', 'will', 'your', 'from', 'they', 'been', 'call', 'make', 'come', 'time', 'just', 'know', 'take', 'into', 'year', 'some', 'want', 'look', 'work', 'give', 'over', 'think', 'most', 'find', 'day', 'also', 'after', 'way', 'many', 'must', 'look', 'before', 'great', 'back', 'through', 'long', 'where', 'much', 'should', 'well', 'people', 'down', 'own', 'upon', 'good', 'part', 'place', 'write', 'word', 'about', 'read', 'man', 'find', 'change', 'went', 'light', 'kind', 'off', 'need', 'house', 'picture', 'try', 'again', 'animal', 'point', 'mother', 'world', 'near', 'build', 'self', 'earth', 'father', 'head', 'stand', 'page', 'country', 'found', 'answer', 'school', 'grow', 'study', 'learn', 'plant', 'cover', 'food', 'sun', 'thought', 'let', 'keep', 'eye', 'never', 'last', 'door', 'between', 'city', 'tree', 'cross', 'since', 'hard', 'start', 'might', 'story', 'saw', 'far', 'sea', 'draw', 'left', 'late', 'run', "don't", 'while', 'press', 'close', 'night', 'real', 'life', 'few', 'north', 'book', 'carry', 'took', 'science', 'eat', 'room', 'friend', 'began', 'idea', 'fish', 'mountain', 'stop', 'once', 'base', 'hear', 'horse', 'cut', 'sure', 'watch', 'color', 'face', 'wood', 'main', 'open', 'seem', 'together', 'next', 'white', 'children', 'begin', 'got', 'walk', 'example', 'ease', 'paper', 'group', 'always', 'music', 'those', 'both', 'mark', 'often', 'letter', 'until', 'mile', 'river', 'car', 'feet', 'care', 'second', 'book', 'remember', 'early', 'game', 'line', 'quite', 'move', 'thing', 'light', 'kilogram', 'common', 'come', 'difference', 'use', 'language', 'govern', 'please', 'simple', 'third', 'order', 'fire', 'south', 'problem', 'full', 'hear', 'ask', 'force', 'air', 'today', 'important', 'play', 'still', 'learn', 'water', 'little', 'small', 'round', 'man', 'year', 'woman', 'should', 'call', 'ask', 'show', 'try', 'put', 'take', 'get', 'make', 'feel', 'leave', 'let', 'begin', 'seem', 'help', 'talk', 'turn', 'start', 'keep', 'hold', 'write', 'become', 'like', 'love', 'use', 'find', 'give', 'tell', 'work', 'follow', 'act', 'speak', 'read', 'pass', 'die', 'send', 'receive', 'believe', 'accept', 'allow', 'break', 'bring', 'build', 'buy', 'catch', 'choose', 'come', 'cost', 'cut', 'do', 'draw', 'drink', 'drive', 'eat', 'fall', 'feel', 'fight', 'find', 'fly', 'forget', 'get', 'give', 'go', 'grow', 'have', 'hear', 'hit', 'hold', 'hurt', 'keep', 'know', 'lay', 'lead', 'learn', 'leave', 'lend', 'let', 'lie', 'light', 'lose', 'make', 'mean', 'meet', 'pay', 'put', 'read', 'ride', 'ring', 'run', 'say', 'see', 'sell', 'send', 'set', 'shake', 'shine', 'show', 'shut', 'sing', 'sit', 'sleep', 'speak', 'spend', 'stand', 'steal', 'stick', 'strike', 'swear', 'sweep', 'swim', 'take', 'teach', 'tear', 'tell', 'think', 'throw', 'understand', 'wake', 'wear', 'win', 'write']
+        common_words = ['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'has', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'own', 'say', 'she', 'too', 'use', 'with', 'have', 'this', 'will', 'your', 'from', 'they', 'been', 'call', 'make', 'come', 'time', 'just', 'know', 'take', 'into', 'year', 'some', 'want', 'look', 'work', 'give', 'over', 'think', 'most', 'find', 'day', 'also', 'after', 'way', 'many', 'must', 'look', 'before', 'great', 'back', 'through', 'long', 'where', 'much', 'should', 'well', 'people', 'down', 'own', 'upon', 'good', 'part', 'place', 'write', 'word', 'about', 'read', 'man', 'find', 'change', 'went', 'light', 'kind', 'off', 'need', 'house', 'picture', 'try', 'again', 'animal', 'point', 'mother', 'world', 'near', 'build', 'self', 'earth', 'father', 'head', 'stand', 'page', 'country', 'found', 'answer', 'school', 'grow', 'study', 'learn', 'plant', 'cover', 'food', 'sun', 'thought', 'let', 'keep', 'eye', 'never', 'last', 'door', 'between', 'city', 'tree', 'cross', 'since', 'hard', 'start', 'might', 'story', 'saw', 'far', 'sea', 'draw', 'left', 'late', 'run', "don't", 'while', 'press', 'close', 'night', 'real', 'life', 'few', 'north', 'book', 'carry', 'took', 'science', 'eat', 'room', 'friend', 'began', 'idea', 'fish', 'mountain', 'stop', 'once', 'base', 'hear', 'horse', 'cut', 'sure', 'watch', 'color', 'face', 'wood', 'main', 'open', 'seem', 'together', 'next', 'white', 'children', 'begin', 'got', 'walk', 'example', 'ease', 'paper', 'group', 'always', 'music', 'those', 'both', 'mark', 'often', 'letter', 'until', 'mile', 'river', 'car', 'feet', 'care', 'second', 'book', 'remember', 'early', 'game', 'line', 'quite', 'move', 'thing', 'light', 'kilogram', 'common', 'come', 'difference', 'use', 'language', 'govern', 'please', 'simple', 'third', 'order', 'fire', 'south', 'problem', 'full', 'hear', 'ask', 'force', 'air', 'today', 'important', 'girl', 'leave', 'continue', 'family', 'later', 'show', 'interest', 'state', 'same', 'fact', 'during', 'general', 'public', 'small', 'large', 'little', 'only', 'such', 'other', 'each', 'which', 'their', 'these', 'those', 'some', 'any', 'every', 'each', 'all', 'both', 'few', 'most', 'other', 'some', 'such', 'that', 'this', 'these', 'those', 'what', 'which', 'who', 'whom', 'whose', 'why', 'how', 'when', 'where', 'whether', 'why']
+        
         text_lower = text.lower()
         for word in common_words:
             if f' {word} ' in text_lower or text_lower.startswith(f'{word} ') or text_lower.endswith(f' {word}'):
@@ -206,6 +235,7 @@ def _smart_split_paragraphs(text: str) -> list:
     if current_para:
         paragraphs.append('\n'.join(current_para))
     
+    logger.debug(f"[_smart_split_paragraphs] 分割为 {len(paragraphs)} 个段落")
     return paragraphs
 
 
@@ -231,9 +261,11 @@ def _is_likely_english_heading(para: str) -> tuple:
         return False, None
     
     english_ratio = english_letters / total_chars
+    logger.debug(f"[_is_likely_english_heading] 英文比例: {english_ratio:.2f}, 长度: {para_len}")
     
     if english_ratio > 0.7:
         if para.isupper() and para_len >= 2:
+            logger.debug(f"[_is_likely_english_heading] 全部大写英文，识别为标题")
             if para_len <= 10:
                 return True, 'h1'
             elif para_len <= 20:
@@ -245,6 +277,7 @@ def _is_likely_english_heading(para: str) -> tuple:
         if len(words) >= 1 and len(words) <= 10:
             title_case = all(word and word[0].isupper() for word in words if word)
             if title_case and not para.endswith(('.', '!', '?', ',', ';', ':')):
+                logger.debug(f"[_is_likely_english_heading] 标题格式英文，识别为标题")
                 if para_len <= 15:
                     return True, 'h2'
                 elif para_len <= 30:
@@ -256,6 +289,7 @@ def _is_likely_english_heading(para: str) -> tuple:
         
         if english_ratio > 0.9 and para_len <= 30:
             if not para.endswith(('.', '!', '?', ',', ';', ':')):
+                logger.debug(f"[_is_likely_english_heading] 纯英文短句，识别为标题")
                 if para_len <= 15:
                     return True, 'h3'
                 else:
@@ -287,10 +321,12 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
     
     for pattern, level in heading_patterns:
         if re.match(pattern, para):
+            logger.debug(f"[_is_likely_heading] 匹配标题模式: {para[:20]}..., 级别: h{level}")
             return True, f'h{level}'
     
     is_eng_heading, eng_level = _is_likely_english_heading(para)
     if is_eng_heading:
+        logger.debug(f"[_is_likely_heading] 识别为英文标题: {para[:20]}..., 级别: {eng_level}")
         return True, eng_level
     
     if para_len <= 80:
@@ -301,24 +337,30 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
             if chinese_count > 0:
                 has_common_words = any(word in para for word in ['的', '是', '在', '了', '和', '与', '或', '中', '上', '下', '这', '那', '有', '为', '以', '及', '等', '也', '都', '就', '被', '把', '让', '给', '到', '从', '向', '对', '跟', '和', '同', '与', '比', '被', '把', '让', '给', '到', '从', '向', '对', '跟'])
                 
-                if not has_common_words:
-                    has_next_content = next_para and len(next_para.strip()) > 50
-                    has_prev_content = prev_para and len(prev_para.strip()) > 0
-                    
-                    if has_next_content or (not has_prev_content and not next_para):
-                        if para_len <= 15:
-                            return True, 'h2'
-                        elif para_len <= 30:
-                            return True, 'h3'
-                        elif para_len <= 50:
-                            return True, 'h4'
-                        else:
-                            return True, 'h5'
+                if has_common_words:
+                    logger.debug(f"[_is_likely_heading] 包含常见连接词，不识别为标题: {para[:20]}...")
+                    return False, None
+                
+                has_next_content = next_para and len(next_para.strip()) > 50
+                has_prev_content = prev_para and len(prev_para.strip()) > 0
+                
+                if has_next_content or (not has_prev_content and not next_para):
+                    logger.debug(f"[_is_likely_heading] 识别为中文标题: {para[:20]}...")
+                    if para_len <= 15:
+                        return True, 'h2'
+                    elif para_len <= 30:
+                        return True, 'h3'
+                    elif para_len <= 50:
+                        return True, 'h4'
+                    else:
+                        return True, 'h5'
             
             if prev_para and len(prev_para.strip()) > 0:
                 if next_para and len(next_para.strip()) > 100:
+                    logger.debug(f"[_is_likely_heading] 上下文判断为标题: {para[:20]}...")
                     return True, 'h3'
     
+    logger.debug(f"[_is_likely_heading] 不识别为标题: {para[:20]}...")
     return False, None
 
 
@@ -344,6 +386,7 @@ def _is_list_item(para: str) -> tuple:
         match = re.match(pattern, para)
         if match:
             content = para[match.end():].strip()
+            logger.debug(f"[_is_list_item] 识别为无序列表项: {content[:20]}...")
             return True, 'ul', content
     
     ol_patterns = [
@@ -358,6 +401,7 @@ def _is_list_item(para: str) -> tuple:
         match = re.match(pattern, para)
         if match:
             content = para[match.end():].strip()
+            logger.debug(f"[_is_list_item] 识别为有序列表项: {content[:20]}...")
             return True, list_type, content
     
     return False, None, None
@@ -367,7 +411,10 @@ def _convert_text_to_html(text: str) -> str:
     """
     智能转换文本到HTML，识别标题、列表、段落等格式
     """
+    logger.info(f"[_convert_text_to_html] 开始转换，文本长度: {len(text)}")
+    
     if not text or len(text.strip()) == 0:
+        logger.warning("[_convert_text_to_html] 文本为空")
         return ""
     
     paragraphs = _smart_split_paragraphs(text)
@@ -420,7 +467,10 @@ def _convert_text_to_html(text: str) -> str:
     if in_list:
         html_parts.append(f'</{list_type}>')
     
-    return '\n'.join(html_parts)
+    result = '\n'.join(html_parts)
+    logger.info(f"[_convert_text_to_html] 转换完成，HTML长度: {len(result)}")
+    logger.debug(f"[_convert_text_to_html] HTML内容: {result[:200]}...")
+    return result
 
 
 def extract_simple_text(data: bytes) -> str:
@@ -476,13 +526,17 @@ def extract_text_from_doc(file_path: str) -> str:
     从旧版 .doc 文件（OLE格式）中提取文本
     这是一个简化的实现，尝试从 WordDocument 流中提取文本
     """
+    logger.warning(f"[extract_text_from_doc] 使用自定义解析器（备选方案）: {file_path}")
+    
     if not olefile.isOleFile(file_path):
+        logger.error("[extract_text_from_doc] 不是有效的 OLE 文件")
         return ""
     
     try:
         ole = olefile.OleFileIO(file_path)
         
         if not ole.exists('WordDocument'):
+            logger.error("[extract_text_from_doc] 找不到 WordDocument 流")
             ole.close()
             return ""
         
@@ -497,6 +551,8 @@ def extract_text_from_doc(file_path: str) -> str:
         try:
             fc_min = struct.unpack('<I', word_data[0x18:0x1C])[0]
             fc_max = struct.unpack('<I', word_data[0x1C:0x20])[0]
+            
+            logger.debug(f"[extract_text_from_doc] fc_min={fc_min}, fc_max={fc_max}")
             
             if 0 < fc_min < fc_max <= len(word_data):
                 text_content = word_data[fc_min:fc_max]
@@ -528,13 +584,14 @@ def extract_text_from_doc(file_path: str) -> str:
                             cleaned_text = _clean_word_text(text)
                             if cleaned_text and len(cleaned_text.strip()) > 20:
                                 if _is_highly_likely_valid_text(cleaned_text):
+                                    logger.info(f"[extract_text_from_doc] 使用编码 {encoding} 提取成功，长度: {len(cleaned_text)}")
                                     return cleaned_text
                                 elif _is_likely_valid_text(cleaned_text):
                                     extracted_texts.append(cleaned_text)
                         except:
                             continue
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"[extract_text_from_doc] 尝试提取时出错: {e}")
         
         for encoding in ['utf-16-le', 'utf-16-be', 'gbk', 'gb2312', 'gb18030', 'big5', 'utf-8', 'latin-1', 'cp1252']:
             try:
@@ -542,6 +599,7 @@ def extract_text_from_doc(file_path: str) -> str:
                 cleaned_text = _clean_word_text(text)
                 if cleaned_text and len(cleaned_text.strip()) > 20:
                     if _is_highly_likely_valid_text(cleaned_text):
+                        logger.info(f"[extract_text_from_doc] 使用编码 {encoding} 提取成功")
                         return cleaned_text
                     elif _is_likely_valid_text(cleaned_text):
                         extracted_texts.append(cleaned_text)
@@ -571,14 +629,60 @@ def extract_text_from_doc(file_path: str) -> str:
         return ""
         
     except Exception as e:
-        print(f"Error extracting text from .doc file: {e}")
+        logger.error(f"[extract_text_from_doc] 提取文本时出错: {e}")
+        import traceback
+        traceback.print_exc()
         return ""
+
+
+def parse_docx_with_mammoth(file_path: str) -> tuple[str, str]:
+    """
+    使用 mammoth 解析 .docx 文件（保留格式：标题、列表、表格、加粗、斜体等）
+    """
+    logger.info(f"[parse_docx_with_mammoth] 使用 mammoth 解析: {file_path}")
+    
+    try:
+        with open(file_path, "rb") as docx_file:
+            result = mammoth.convert_to_html(docx_file)
+            html_content = result.value
+            messages = result.messages
+            
+            logger.info(f"[parse_docx_with_mammoth] 转换成功，HTML长度: {len(html_content)}")
+            
+            if messages:
+                logger.warning(f"[parse_docx_with_mammoth] 转换消息: {messages}")
+            
+            text_content = re.sub(r'<[^>]+>', ' ', html_content)
+            text_content = re.sub(r'\s+', ' ', text_content).strip()
+            
+            logger.info(f"[parse_docx_with_mammoth] 文本长度: {len(text_content)}")
+            logger.debug(f"[parse_docx_with_mammoth] HTML内容: {html_content[:300]}...")
+            
+            return text_content, html_content
+            
+    except Exception as e:
+        logger.error(f"[parse_docx_with_mammoth] 解析出错: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def parse_docx(file_path: str) -> tuple[str, str]:
     """
     解析 .docx 文件（Open XML格式）
+    优先使用 mammoth（保留格式），备选使用 python-docx
     """
+    logger.info(f"[parse_docx] 开始解析 .docx 文件: {file_path}")
+    
+    if HAS_MAMMOTH:
+        try:
+            return parse_docx_with_mammoth(file_path)
+        except Exception as e:
+            logger.warning(f"[parse_docx] mammoth 解析失败，回退到 python-docx: {e}")
+    else:
+        logger.warning("[parse_docx] mammoth 不可用，使用 python-docx")
+    
+    logger.info("[parse_docx] 使用 python-docx 解析")
     doc = DocxDocument(file_path)
     
     content_parts = []
@@ -590,6 +694,8 @@ def parse_docx(file_path: str) -> tuple[str, str]:
             content_parts.append(text)
             
             style = para.style.name.lower()
+            logger.debug(f"[parse_docx] 段落样式: {style}, 内容: {text[:30]}...")
+            
             if 'heading 1' in style:
                 html_parts.append(f"<h1>{text}</h1>")
             elif 'heading 2' in style:
@@ -608,8 +714,9 @@ def parse_docx(file_path: str) -> tuple[str, str]:
                 html_parts.append(f"<p>{text}</p>")
     
     for table in doc.tables:
+        logger.info(f"[parse_docx] 发现表格")
         html_table = "<table border='1' cellpadding='5' cellspacing='0'>"
-        for row in table.rows:
+        for row in doc.tables:
             html_table += "<tr>"
             for cell in row.cells:
                 cell_text = cell.text.strip()
@@ -622,6 +729,8 @@ def parse_docx(file_path: str) -> tuple[str, str]:
     content = "\n\n".join(content_parts)
     html_content = "\n".join(html_parts)
     
+    logger.info(f"[parse_docx] 解析完成，content长度: {len(content)}, html长度: {len(html_content)}")
+    
     return content, html_content
 
 
@@ -630,34 +739,52 @@ def parse_old_doc(file_path: str) -> tuple[str, str]:
     解析旧版 .doc 文件（OLE格式）
     优先使用 pyantiword，如果失败则使用自定义解析逻辑
     """
+    logger.info(f"[parse_old_doc] 开始解析 .doc 文件: {file_path}")
+    
     text = ""
     
     if HAS_ANTIWORD:
+        logger.info("[parse_old_doc] 尝试使用 pyantiword")
         try:
             text = antiword_extract_text(file_path)
+            logger.info(f"[parse_old_doc] pyantiword 提取成功，原始长度: {len(text)}")
+            
             if text:
                 text = text.strip()
                 if len(text) > 10:
                     text = _clean_word_text(text)
+                    logger.info(f"[parse_old_doc] 清理后长度: {len(text)}")
+                    
                     if _is_highly_likely_valid_text(text):
+                        logger.info("[parse_old_doc] 文本有效，转换为HTML")
                         html_content = _convert_text_to_html(text)
                         return text, html_content
                     elif _is_likely_valid_text(text):
+                        logger.info("[parse_old_doc] 文本可能有效，继续尝试其他方法")
                         pass
         except Exception as e:
-            print(f"Error using pyantiword: {e}, falling back to custom parser")
+            logger.error(f"[parse_old_doc] pyantiword 解析出错: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        logger.warning("[parse_old_doc] pyantiword 不可用")
     
+    logger.warning("[parse_old_doc] 回退到自定义解析器")
     text = extract_text_from_doc(file_path)
     
     if not text or len(text.strip()) < 10:
+        logger.warning("[parse_old_doc] 自定义解析器提取失败，尝试简单提取")
         with open(file_path, 'rb') as f:
             data = f.read()
             text = extract_simple_text(data)
     
     if not text or not _is_likely_valid_text(text):
+        logger.error("[parse_old_doc] 无法提取有效内容")
         return "[旧版Word文档 (.doc) - 无法提取有效内容]", "<p><em>旧版Word文档 (.doc) - 无法提取有效内容</em></p>"
     
     html_content = _convert_text_to_html(text)
+    
+    logger.info(f"[parse_old_doc] 解析完成，content长度: {len(text)}, html长度: {len(html_content)}")
     
     return text, html_content
 
@@ -666,20 +793,28 @@ def parse_doc(file_path: str) -> tuple[str, str]:
     """
     解析Word文档，自动检测格式并选择合适的解析器
     """
+    logger.info("=" * 60)
+    logger.info(f"[parse_doc] 开始解析文件: {file_path}")
+    logger.info("=" * 60)
+    
     file_path = Path(file_path)
     
     try:
         if is_docx_file(str(file_path)):
+            logger.info("[parse_doc] 检测为 .docx 格式")
             return parse_docx(str(file_path))
         
         elif is_doc_file(str(file_path)):
+            logger.info("[parse_doc] 检测为 .doc 格式")
             text, html = parse_old_doc(str(file_path))
             if text and _is_likely_valid_text(text):
                 return text, html
             else:
+                logger.warning("[parse_doc] .doc 解析结果无效")
                 return f"[旧版Word文档 (.doc) - 无法提取有效内容]", "<p><em>旧版Word文档 (.doc) - 无法提取有效内容</em></p>"
         
         else:
+            logger.warning("[parse_doc] 格式不明确，尝试各种解析器")
             try:
                 return parse_docx(str(file_path))
             except BadZipFile:
@@ -691,7 +826,10 @@ def parse_doc(file_path: str) -> tuple[str, str]:
                 except:
                     pass
                 
+                logger.error("[parse_doc] 无法识别文件格式")
                 return f"[不支持的Word文档格式]", "<p><em>不支持的Word文档格式</em></p>"
     except Exception as e:
-        print(f"Error parsing Word document: {e}")
+        logger.error(f"[parse_doc] 解析出错: {e}")
+        import traceback
+        traceback.print_exc()
         return f"[文档解析错误: {str(e)}]", f"<p><em>文档解析错误: {str(e)}</em></p>"
