@@ -6,12 +6,39 @@ import struct
 import re
 import chardet
 import logging
+from logging.handlers import RotatingFileHandler
+import os
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+LOG_DIR = Path(__file__).resolve().parent.parent.parent / 'log'
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / 'doc_parser.log'
+
 logger = logging.getLogger('doc_parser')
+logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+file_handler = RotatingFileHandler(
+    LOG_FILE, 
+    maxBytes=10*1024*1024,
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+
+if not logger.handlers:
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+logger.info("=" * 60)
+logger.info("doc_parser 模块初始化")
+logger.info(f"日志文件: {LOG_FILE}")
+logger.info("=" * 60)
 
 try:
     from pyantiword.antiword_wrapper import extract_text_with_antiword as antiword_extract_text
@@ -83,23 +110,38 @@ def _detect_encoding(data: bytes) -> str:
     return 'utf-8'
 
 
-def _clean_word_text(text: str) -> str:
+def _smart_clean_text(text: str) -> str:
     """
-    清理从 Word 文档中提取的文本
+    智能清理从 Word 文档中提取的文本
+    保留段落结构，只清理不可见字符
     """
     if not text:
         return ""
     
-    logger.debug(f"[_clean_word_text] 清理前长度: {len(text)}")
+    logger.debug(f"[_smart_clean_text] 清理前长度: {len(text)}")
+    logger.debug(f"[_smart_clean_text] 原始内容 (repr): {repr(text[:200])}")
     
-    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
-    text = re.sub(r'\x0D\x0A|\x0D|\x0A', '\n', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    text = re.sub(r' {2,}', ' ', text)
-    text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', text)
+    lines = text.split('\n')
+    cleaned_lines = []
     
-    result = text.strip()
-    logger.debug(f"[_clean_word_text] 清理后长度: {len(result)}")
+    for line in lines:
+        line = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', line)
+        
+        original_line = line
+        line = line.rstrip()
+        
+        if re.match(r'^\s+\S', line):
+            leading_spaces = len(line) - len(line.lstrip())
+            if leading_spaces > 20:
+                logger.debug(f"[_smart_clean_text] 行前有大量空格 ({leading_spaces}个)，可能是缩进格式: {repr(original_line[:50])}")
+        
+        cleaned_lines.append(line)
+    
+    result = '\n'.join(cleaned_lines)
+    
+    logger.debug(f"[_smart_clean_text] 清理后长度: {len(result)}")
+    logger.debug(f"[_smart_clean_text] 清理后内容 (repr): {repr(result[:200])}")
+    
     return result
 
 
@@ -213,29 +255,77 @@ def _is_likely_valid_text(text: str) -> bool:
 def _smart_split_paragraphs(text: str) -> list:
     """
     智能分割段落，考虑多种换行符组合
+    改进：更好地处理 Word 文档中的格式
     """
     if not text:
         return []
     
-    paragraphs = []
-    current_para = []
+    logger.debug(f"[_smart_split_paragraphs] 原始文本长度: {len(text)}")
+    logger.debug(f"[_smart_split_paragraphs] 原始文本 (repr): {repr(text[:300])}")
     
     lines = text.split('\n')
+    logger.debug(f"[_smart_split_paragraphs] 按 \\n 分割为 {len(lines)} 行")
     
-    for line in lines:
+    paragraphs = []
+    current_para = []
+    blank_line_count = 0
+    
+    for i, line in enumerate(lines):
         line = line.rstrip()
         
         if not line:
+            blank_line_count += 1
             if current_para:
-                paragraphs.append('\n'.join(current_para))
+                para_text = ' '.join(current_para).strip()
+                if para_text:
+                    paragraphs.append(para_text)
                 current_para = []
-        else:
-            current_para.append(line)
+            continue
+        
+        blank_line_count = 0
+        
+        line_stripped = line.strip()
+        
+        if line.startswith('|') and line.endswith('|'):
+            if current_para:
+                para_text = ' '.join(current_para).strip()
+                if para_text:
+                    paragraphs.append(para_text)
+                current_para = []
+            paragraphs.append(line)
+            continue
+        
+        leading_spaces = len(line) - len(line.lstrip())
+        
+        if leading_spaces > 10 and current_para:
+            logger.debug(f"[_smart_split_paragraphs] 行 {i} 有大量前导空格 ({leading_spaces}个)，可能是新段落: {repr(line_stripped[:30])}")
+            para_text = ' '.join(current_para).strip()
+            if para_text:
+                paragraphs.append(para_text)
+            current_para = [line_stripped]
+            continue
+        
+        if current_para:
+            last_para = current_para[-1]
+            if last_para and last_para.endswith(('。', '！', '？', '；', '：', '.', '!', '?', ';', ':')):
+                logger.debug(f"[_smart_split_paragraphs] 前一行以标点结尾，可能是新段落")
+                para_text = ' '.join(current_para).strip()
+                if para_text:
+                    paragraphs.append(para_text)
+                current_para = [line_stripped]
+                continue
+        
+        current_para.append(line_stripped)
     
     if current_para:
-        paragraphs.append('\n'.join(current_para))
+        para_text = ' '.join(current_para).strip()
+        if para_text:
+            paragraphs.append(para_text)
     
-    logger.debug(f"[_smart_split_paragraphs] 分割为 {len(paragraphs)} 个段落")
+    logger.debug(f"[_smart_split_paragraphs] 最终分割为 {len(paragraphs)} 个段落")
+    for i, para in enumerate(paragraphs):
+        logger.debug(f"  [{i}] {repr(para[:50])}")
+    
     return paragraphs
 
 
@@ -261,9 +351,11 @@ def _is_likely_english_heading(para: str) -> tuple:
         return False, None
     
     english_ratio = english_letters / total_chars
-    logger.debug(f"[_is_likely_english_heading] 英文比例: {english_ratio:.2f}, 长度: {para_len}")
+    logger.debug(f"[_is_likely_english_heading] 英文比例: {english_ratio:.2f}, 长度: {para_len}, 内容: {repr(para)}")
     
-    if english_ratio > 0.7:
+    if chinese_count == 0 and english_ratio > 0.8:
+        logger.debug(f"[_is_likely_english_heading] 纯英文段落，可能是标题")
+        
         if para.isupper() and para_len >= 2:
             logger.debug(f"[_is_likely_english_heading] 全部大写英文，识别为标题")
             if para_len <= 10:
@@ -309,6 +401,9 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
     para = para.strip()
     para_len = len(para)
     
+    if para.startswith('|') and para.endswith('|'):
+        return False, None
+    
     heading_patterns = [
         (r'^第[一二三四五六七八九十百千\d]+[章节篇条]\s*[：:]*\s*', 1),
         (r'^[一二三四五六七八九十]+[、.．]\s*', 2),
@@ -321,12 +416,12 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
     
     for pattern, level in heading_patterns:
         if re.match(pattern, para):
-            logger.debug(f"[_is_likely_heading] 匹配标题模式: {para[:20]}..., 级别: h{level}")
+            logger.debug(f"[_is_likely_heading] 匹配标题模式: {para[:30]}..., 级别: h{level}")
             return True, f'h{level}'
     
     is_eng_heading, eng_level = _is_likely_english_heading(para)
     if is_eng_heading:
-        logger.debug(f"[_is_likely_heading] 识别为英文标题: {para[:20]}..., 级别: {eng_level}")
+        logger.debug(f"[_is_likely_heading] 识别为英文标题: {para[:30]}..., 级别: {eng_level}")
         return True, eng_level
     
     if para_len <= 80:
@@ -338,14 +433,14 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
                 has_common_words = any(word in para for word in ['的', '是', '在', '了', '和', '与', '或', '中', '上', '下', '这', '那', '有', '为', '以', '及', '等', '也', '都', '就', '被', '把', '让', '给', '到', '从', '向', '对', '跟', '和', '同', '与', '比', '被', '把', '让', '给', '到', '从', '向', '对', '跟'])
                 
                 if has_common_words:
-                    logger.debug(f"[_is_likely_heading] 包含常见连接词，不识别为标题: {para[:20]}...")
+                    logger.debug(f"[_is_likely_heading] 包含常见连接词，不识别为标题: {para[:30]}...")
                     return False, None
                 
                 has_next_content = next_para and len(next_para.strip()) > 50
                 has_prev_content = prev_para and len(prev_para.strip()) > 0
                 
                 if has_next_content or (not has_prev_content and not next_para):
-                    logger.debug(f"[_is_likely_heading] 识别为中文标题: {para[:20]}...")
+                    logger.debug(f"[_is_likely_heading] 识别为中文标题: {para[:30]}...")
                     if para_len <= 15:
                         return True, 'h2'
                     elif para_len <= 30:
@@ -357,10 +452,10 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
             
             if prev_para and len(prev_para.strip()) > 0:
                 if next_para and len(next_para.strip()) > 100:
-                    logger.debug(f"[_is_likely_heading] 上下文判断为标题: {para[:20]}...")
+                    logger.debug(f"[_is_likely_heading] 上下文判断为标题: {para[:30]}...")
                     return True, 'h3'
     
-    logger.debug(f"[_is_likely_heading] 不识别为标题: {para[:20]}...")
+    logger.debug(f"[_is_likely_heading] 不识别为标题: {para[:30]}...")
     return False, None
 
 
@@ -370,6 +465,9 @@ def _is_list_item(para: str) -> tuple:
     返回: (是否是列表项, 列表类型: 'ul' 或 'ol', 列表项内容)
     """
     if not para or len(para.strip()) == 0:
+        return False, None, None
+    
+    if para.startswith('|') and para.endswith('|'):
         return False, None, None
     
     para = para.strip()
@@ -386,7 +484,7 @@ def _is_list_item(para: str) -> tuple:
         match = re.match(pattern, para)
         if match:
             content = para[match.end():].strip()
-            logger.debug(f"[_is_list_item] 识别为无序列表项: {content[:20]}...")
+            logger.debug(f"[_is_list_item] 识别为无序列表项: {content[:30]}...")
             return True, 'ul', content
     
     ol_patterns = [
@@ -401,15 +499,33 @@ def _is_list_item(para: str) -> tuple:
         match = re.match(pattern, para)
         if match:
             content = para[match.end():].strip()
-            logger.debug(f"[_is_list_item] 识别为有序列表项: {content[:20]}...")
+            logger.debug(f"[_is_list_item] 识别为有序列表项: {content[:30]}...")
             return True, list_type, content
     
     return False, None, None
 
 
+def _is_table_row(para: str) -> bool:
+    """
+    判断段落是否是表格行（以 | 分隔）
+    """
+    if not para or len(para.strip()) == 0:
+        return False
+    
+    para = para.strip()
+    
+    if para.startswith('|') and para.endswith('|'):
+        pipe_count = para.count('|')
+        if pipe_count >= 3:
+            logger.debug(f"[_is_table_row] 识别为表格行: {para[:50]}...")
+            return True
+    
+    return False
+
+
 def _convert_text_to_html(text: str) -> str:
     """
-    智能转换文本到HTML，识别标题、列表、段落等格式
+    智能转换文本到HTML，识别标题、列表、表格、段落等格式
     """
     logger.info(f"[_convert_text_to_html] 开始转换，文本长度: {len(text)}")
     
@@ -425,6 +541,8 @@ def _convert_text_to_html(text: str) -> str:
     html_parts = []
     in_list = False
     list_type = None
+    in_table = False
+    table_rows = []
     
     for i, para in enumerate(paragraphs):
         para = para.strip()
@@ -433,6 +551,26 @@ def _convert_text_to_html(text: str) -> str:
         
         prev_para = paragraphs[i-1].strip() if i > 0 else None
         next_para = paragraphs[i+1].strip() if i < len(paragraphs)-1 else None
+        
+        is_table_row = _is_table_row(para)
+        
+        if is_table_row:
+            if not in_table:
+                if in_list:
+                    html_parts.append(f'</{list_type}>')
+                    in_list = False
+                    list_type = None
+                in_table = True
+                table_rows = []
+            
+            table_rows.append(para)
+            continue
+        
+        if in_table:
+            html_table = _convert_table_rows_to_html(table_rows)
+            html_parts.append(html_table)
+            in_table = False
+            table_rows = []
         
         is_list, current_list_type, list_content = _is_list_item(para)
         
@@ -467,9 +605,47 @@ def _convert_text_to_html(text: str) -> str:
     if in_list:
         html_parts.append(f'</{list_type}>')
     
+    if in_table and table_rows:
+        html_table = _convert_table_rows_to_html(table_rows)
+        html_parts.append(html_table)
+    
     result = '\n'.join(html_parts)
     logger.info(f"[_convert_text_to_html] 转换完成，HTML长度: {len(result)}")
-    logger.debug(f"[_convert_text_to_html] HTML内容: {result[:200]}...")
+    logger.debug(f"[_convert_text_to_html] HTML内容: {result[:300]}...")
+    
+    return result
+
+
+def _convert_table_rows_to_html(table_rows: list) -> str:
+    """
+    将表格行（以 | 分隔）转换为 HTML 表格
+    """
+    if not table_rows:
+        return ""
+    
+    logger.info(f"[_convert_table_rows_to_html] 转换 {len(table_rows)} 行表格")
+    
+    html_parts = ["<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"]
+    
+    for row_idx, row in enumerate(table_rows):
+        cells = [cell.strip() for cell in row.split('|') if cell.strip()]
+        
+        if row_idx == 0:
+            cell_tag = 'th'
+        else:
+            cell_tag = 'td'
+        
+        html_row = f"<tr>"
+        for cell in cells:
+            html_row += f"<{cell_tag}>{cell}</{cell_tag}>"
+        html_row += "</tr>"
+        html_parts.append(html_row)
+    
+    html_parts.append("</table>")
+    
+    result = '\n'.join(html_parts)
+    logger.debug(f"[_convert_table_rows_to_html] 转换结果: {result[:200]}...")
+    
     return result
 
 
@@ -503,7 +679,7 @@ def extract_simple_text(data: bytes) -> str:
             text_parts.append(text)
     
     result = '\n'.join(text_parts)
-    return _clean_word_text(result)
+    return _smart_clean_text(result)
 
 
 def _try_decode_with_encoding(data: bytes, encoding: str) -> str:
@@ -581,7 +757,7 @@ def extract_text_from_doc(file_path: str) -> str:
                         tried_encodings.add(encoding.lower())
                         try:
                             text = _try_decode_with_encoding(text_content, encoding)
-                            cleaned_text = _clean_word_text(text)
+                            cleaned_text = _smart_clean_text(text)
                             if cleaned_text and len(cleaned_text.strip()) > 20:
                                 if _is_highly_likely_valid_text(cleaned_text):
                                     logger.info(f"[extract_text_from_doc] 使用编码 {encoding} 提取成功，长度: {len(cleaned_text)}")
@@ -596,7 +772,7 @@ def extract_text_from_doc(file_path: str) -> str:
         for encoding in ['utf-16-le', 'utf-16-be', 'gbk', 'gb2312', 'gb18030', 'big5', 'utf-8', 'latin-1', 'cp1252']:
             try:
                 text = _try_decode_with_encoding(word_data, encoding)
-                cleaned_text = _clean_word_text(text)
+                cleaned_text = _smart_clean_text(text)
                 if cleaned_text and len(cleaned_text.strip()) > 20:
                     if _is_highly_likely_valid_text(cleaned_text):
                         logger.info(f"[extract_text_from_doc] 使用编码 {encoding} 提取成功")
@@ -715,7 +891,7 @@ def parse_docx(file_path: str) -> tuple[str, str]:
     
     for table in doc.tables:
         logger.info(f"[parse_docx] 发现表格")
-        html_table = "<table border='1' cellpadding='5' cellspacing='0'>"
+        html_table = "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
         for row in doc.tables:
             html_table += "<tr>"
             for cell in row.cells:
@@ -748,11 +924,12 @@ def parse_old_doc(file_path: str) -> tuple[str, str]:
         try:
             text = antiword_extract_text(file_path)
             logger.info(f"[parse_old_doc] pyantiword 提取成功，原始长度: {len(text)}")
+            logger.debug(f"[parse_old_doc] 原始内容 (repr): {repr(text[:300])}")
             
             if text:
                 text = text.strip()
                 if len(text) > 10:
-                    text = _clean_word_text(text)
+                    text = _smart_clean_text(text)
                     logger.info(f"[parse_old_doc] 清理后长度: {len(text)}")
                     
                     if _is_highly_likely_valid_text(text):
