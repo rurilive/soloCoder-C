@@ -7,7 +7,7 @@ import re
 import chardet
 
 try:
-    from pyantiword.antiword_wrapper import extract_text as antiword_extract_text
+    from pyantiword.antiword_wrapper import extract_text_with_antiword as antiword_extract_text
     HAS_ANTIWORD = True
 except ImportError:
     HAS_ANTIWORD = False
@@ -209,6 +209,61 @@ def _smart_split_paragraphs(text: str) -> list:
     return paragraphs
 
 
+def _is_likely_english_heading(para: str) -> tuple:
+    """
+    判断是否是英文标题
+    返回: (是否是标题, 标题级别h1-h6)
+    """
+    if not para or len(para.strip()) == 0:
+        return False, None
+    
+    para = para.strip()
+    para_len = len(para)
+    
+    if para_len > 80:
+        return False, None
+    
+    chinese_count = sum(1 for c in para if '\u4e00' <= c <= '\u9fff')
+    english_letters = sum(1 for c in para if c.isalpha() and ord(c) < 128)
+    
+    total_chars = chinese_count + english_letters
+    if total_chars == 0:
+        return False, None
+    
+    english_ratio = english_letters / total_chars
+    
+    if english_ratio > 0.7:
+        if para.isupper() and para_len >= 2:
+            if para_len <= 10:
+                return True, 'h1'
+            elif para_len <= 20:
+                return True, 'h2'
+            else:
+                return True, 'h3'
+        
+        words = para.split()
+        if len(words) >= 1 and len(words) <= 10:
+            title_case = all(word and word[0].isupper() for word in words if word)
+            if title_case and not para.endswith(('.', '!', '?', ',', ';', ':')):
+                if para_len <= 15:
+                    return True, 'h2'
+                elif para_len <= 30:
+                    return True, 'h3'
+                elif para_len <= 50:
+                    return True, 'h4'
+                else:
+                    return True, 'h5'
+        
+        if english_ratio > 0.9 and para_len <= 30:
+            if not para.endswith(('.', '!', '?', ',', ';', ':')):
+                if para_len <= 15:
+                    return True, 'h3'
+                else:
+                    return True, 'h4'
+    
+    return False, None
+
+
 def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) -> tuple:
     """
     智能判断段落是否是标题
@@ -233,6 +288,10 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
     for pattern, level in heading_patterns:
         if re.match(pattern, para):
             return True, f'h{level}'
+    
+    is_eng_heading, eng_level = _is_likely_english_heading(para)
+    if is_eng_heading:
+        return True, eng_level
     
     if para_len <= 80:
         ends_with_punctuation = para.endswith(('。', '！', '？', '，', '；', '：', '.', '!', '?', ',', ';', ':'))
