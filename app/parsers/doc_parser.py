@@ -240,14 +240,21 @@ def _is_likely_heading(para: str, prev_para: str = None, next_para: str = None) 
         if not ends_with_punctuation:
             chinese_count = sum(1 for c in para if '\u4e00' <= c <= '\u9fff')
             if chinese_count > 0:
-                if para_len <= 15:
-                    return True, 'h2'
-                elif para_len <= 30:
-                    return True, 'h3'
-                elif para_len <= 50:
-                    return True, 'h4'
-                else:
-                    return True, 'h5'
+                has_common_words = any(word in para for word in ['的', '是', '在', '了', '和', '与', '或', '中', '上', '下', '这', '那', '有', '为', '以', '及', '等', '也', '都', '就', '被', '把', '让', '给', '到', '从', '向', '对', '跟', '和', '同', '与', '比', '被', '把', '让', '给', '到', '从', '向', '对', '跟'])
+                
+                if not has_common_words:
+                    has_next_content = next_para and len(next_para.strip()) > 50
+                    has_prev_content = prev_para and len(prev_para.strip()) > 0
+                    
+                    if has_next_content or (not has_prev_content and not next_para):
+                        if para_len <= 15:
+                            return True, 'h2'
+                        elif para_len <= 30:
+                            return True, 'h3'
+                        elif para_len <= 50:
+                            return True, 'h4'
+                        else:
+                            return True, 'h5'
             
             if prev_para and len(prev_para.strip()) > 0:
                 if next_para and len(next_para.strip()) > 100:
