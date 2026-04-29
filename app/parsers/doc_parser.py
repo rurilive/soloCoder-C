@@ -1011,20 +1011,20 @@ def parse_docx_with_mammoth(file_path: str) -> tuple[str, str]:
     logger.info(f"[parse_docx_with_mammoth] 使用 mammoth 解析: {file_path}")
     
     try:
-        style_map = mammoth.StyleMap([
-            "b => b",
-            "i => i",
-            "u => u",
-            "strikethrough => s",
-            "heading 1 => h1",
-            "heading 2 => h2",
-            "heading 3 => h3",
-            "heading 4 => h4",
-            "heading 5 => h5",
-            "heading 6 => h6",
-            "list paragraph => p:unordered-list-item",
-            "numbered paragraph => p:ordered-list-item",
-        ])
+        style_map = """
+b => b
+i => i
+u => u
+strikethrough => s
+heading 1 => h1
+heading 2 => h2
+heading 3 => h3
+heading 4 => h4
+heading 5 => h5
+heading 6 => h6
+list paragraph => p:unordered-list-item
+numbered paragraph => p:ordered-list-item
+"""
         
         with open(file_path, "rb") as docx_file:
             result = mammoth.convert_to_html(docx_file, style_map=style_map)
