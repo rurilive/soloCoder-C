@@ -834,9 +834,69 @@ def extract_text_from_doc(file_path: str) -> str:
         return ""
 
 
+def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
+    """
+    使用 python-docx 读取对齐信息，并增强 mammoth 生成的 HTML
+    """
+    try:
+        doc = DocxDocument(file_path)
+        
+        paragraphs_info = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if text:
+                alignment = para.alignment
+                align_style = _get_alignment_style(alignment)
+                paragraphs_info.append({
+                    'text': text,
+                    'align_style': align_style,
+                    'alignment': alignment
+                })
+        
+        if not paragraphs_info:
+            return html_content
+        
+        def add_alignment_to_tag(match):
+            tag = match.group(1)
+            existing_attrs = match.group(2) or ''
+            content = match.group(3)
+            
+            content_clean = re.sub(r'<[^>]+>', '', content).strip()
+            
+            for para_info in paragraphs_info:
+                para_text = para_info['text']
+                if para_text and content_clean and (para_text in content_clean or content_clean in para_text):
+                    if para_info['align_style']:
+                        if 'style=' in existing_attrs:
+                            existing_attrs = re.sub(
+                                r'style="([^"]*)"',
+                                f'style="\\1 {para_info["align_style"]}"',
+                                existing_attrs
+                            )
+                        else:
+                            existing_attrs = f' style="{para_info["align_style"]}" {existing_attrs}'
+                    break
+            
+            return f'<{tag}{existing_attrs}>{content}</{tag}>'
+        
+        html_content = re.sub(
+            r'<(h[1-6]|p|li)([^>]*)>(.*?)</\1>',
+            add_alignment_to_tag,
+            html_content,
+            flags=re.DOTALL | re.IGNORECASE
+        )
+        
+        return html_content
+        
+    except Exception as e:
+        logger.warning(f"[_enhance_html_with_alignment] 增强对齐样式失败: {e}")
+        return html_content
+
+
 def parse_docx_with_mammoth(file_path: str) -> tuple[str, str]:
     """
     使用 mammoth 解析 .docx 文件（保留格式：标题、列表、表格、加粗、斜体等）
+    并使用 python-docx 补充对齐样式
     """
     logger.info(f"[parse_docx_with_mammoth] 使用 mammoth 解析: {file_path}")
     
@@ -846,10 +906,14 @@ def parse_docx_with_mammoth(file_path: str) -> tuple[str, str]:
             html_content = result.value
             messages = result.messages
             
-            logger.info(f"[parse_docx_with_mammoth] 转换成功，HTML长度: {len(html_content)}")
+            logger.info(f"[parse_docx_with_mammoth] 转换成功，原始HTML长度: {len(html_content)}")
             
             if messages:
                 logger.warning(f"[parse_docx_with_mammoth] 转换消息: {messages}")
+            
+            logger.info("[parse_docx_with_mammoth] 正在增强对齐样式...")
+            html_content = _enhance_html_with_alignment(html_content, file_path)
+            logger.info(f"[parse_docx_with_mammoth] 增强后HTML长度: {len(html_content)}")
             
             text_content = re.sub(r'<[^>]+>', ' ', html_content)
             text_content = re.sub(r'\s+', ' ', text_content).strip()
