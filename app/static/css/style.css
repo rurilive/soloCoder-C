@@ -200,6 +200,12 @@ body {
     background: #c82333;
 }
 
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .btn-small {
     padding: 6px 12px;
     font-size: 13px;

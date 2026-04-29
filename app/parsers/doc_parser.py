@@ -1,5 +1,6 @@
 from pathlib import Path
 from docx import Document as DocxDocument
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from zipfile import BadZipFile
 import olefile
 import struct
@@ -77,6 +78,28 @@ def is_doc_file(file_path: str) -> bool:
     result = olefile.isOleFile(file_path)
     logger.debug(f"[is_doc_file] 结果: {result}")
     return result
+
+
+def _get_alignment_style(alignment) -> str:
+    """
+    将 python-docx 的段落对齐枚举转换为 CSS text-align 样式
+    返回: CSS 样式字符串，如 "text-align: center;"，如果是默认左对齐则返回空字符串
+    """
+    if alignment is None:
+        return ""
+    
+    alignment_map = {
+        WD_ALIGN_PARAGRAPH.LEFT: "",
+        WD_ALIGN_PARAGRAPH.CENTER: "text-align: center;",
+        WD_ALIGN_PARAGRAPH.RIGHT: "text-align: right;",
+        WD_ALIGN_PARAGRAPH.JUSTIFY: "text-align: justify;",
+        WD_ALIGN_PARAGRAPH.DISTRIBUTE: "text-align: justify;",
+        WD_ALIGN_PARAGRAPH.JUSTIFY_MED: "text-align: justify;",
+        WD_ALIGN_PARAGRAPH.JUSTIFY_HI: "text-align: justify;",
+        WD_ALIGN_PARAGRAPH.JUSTIFY_LOW: "text-align: justify;",
+    }
+    
+    return alignment_map.get(alignment, "")
 
 
 def _is_unicode_word(word_data: bytes) -> bool:
@@ -870,29 +893,34 @@ def parse_docx(file_path: str) -> tuple[str, str]:
             content_parts.append(text)
             
             style = para.style.name.lower()
-            logger.debug(f"[parse_docx] 段落样式: {style}, 内容: {text[:30]}...")
+            alignment = para.alignment
+            align_style = _get_alignment_style(alignment)
+            
+            logger.debug(f"[parse_docx] 段落样式: {style}, 对齐: {alignment}, 内容: {text[:30]}...")
+            
+            style_attr = f' style="{align_style}"' if align_style else ''
             
             if 'heading 1' in style:
-                html_parts.append(f"<h1>{text}</h1>")
+                html_parts.append(f"<h1{style_attr}>{text}</h1>")
             elif 'heading 2' in style:
-                html_parts.append(f"<h2>{text}</h2>")
+                html_parts.append(f"<h2{style_attr}>{text}</h2>")
             elif 'heading 3' in style:
-                html_parts.append(f"<h3>{text}</h3>")
+                html_parts.append(f"<h3{style_attr}>{text}</h3>")
             elif 'heading 4' in style:
-                html_parts.append(f"<h4>{text}</h4>")
+                html_parts.append(f"<h4{style_attr}>{text}</h4>")
             elif 'heading 5' in style:
-                html_parts.append(f"<h5>{text}</h5>")
+                html_parts.append(f"<h5{style_attr}>{text}</h5>")
             elif 'heading 6' in style:
-                html_parts.append(f"<h6>{text}</h6>")
+                html_parts.append(f"<h6{style_attr}>{text}</h6>")
             elif 'list' in style or 'bullet' in style:
-                html_parts.append(f"<li>{text}</li>")
+                html_parts.append(f"<li{style_attr}>{text}</li>")
             else:
-                html_parts.append(f"<p>{text}</p>")
+                html_parts.append(f"<p{style_attr}>{text}</p>")
     
     for table in doc.tables:
         logger.info(f"[parse_docx] 发现表格")
         html_table = "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
-        for row in doc.tables:
+        for row in table.rows:
             html_table += "<tr>"
             for cell in row.cells:
                 cell_text = cell.text.strip()

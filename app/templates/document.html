@@ -7,10 +7,10 @@
     <button class="btn btn-secondary" onclick="goBack()">← 返回</button>
     <h2 id="document-title">加载中...</h2>
     <div class="document-actions-header">
-        <button class="btn btn-primary" id="edit-btn" onclick="showEditModal()">✏️ 编辑文档</button>
-        <button class="btn btn-secondary" id="reparse-btn" onclick="reparseDocument()">🔄 重新解析</button>
-        <button class="btn btn-secondary" id="move-btn" onclick="showMoveModal()">移动文档</button>
-        <button class="btn btn-danger" onclick="deleteDocument()">删除文档</button>
+        <button class="btn btn-primary" id="edit-btn" onclick="showEditModal()" disabled>✏️ 编辑文档</button>
+        <button class="btn btn-secondary" id="reparse-btn" onclick="reparseDocument()" disabled>🔄 重新解析</button>
+        <button class="btn btn-secondary" id="move-btn" onclick="showMoveModal()" disabled>移动文档</button>
+        <button class="btn btn-danger" id="delete-btn" onclick="deleteDocument()" disabled>删除文档</button>
     </div>
 </div>
 
@@ -73,6 +73,11 @@
             } else {
                 contentDiv.innerHTML = '<div class="empty-message">此文档暂无内容</div>';
             }
+            
+            document.getElementById('edit-btn').disabled = false;
+            document.getElementById('reparse-btn').disabled = false;
+            document.getElementById('move-btn').disabled = false;
+            document.getElementById('delete-btn').disabled = false;
         } catch (error) {
             console.error('加载文档失败:', error);
             document.getElementById('document-content').innerHTML = `
