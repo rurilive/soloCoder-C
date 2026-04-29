@@ -940,14 +940,13 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
                     'used': False
                 })
         
-        logger.debug(f"[_enhance_html_with_alignment] 从 python-docx 读取到 {len(paragraphs_info)} 个段落")
+        logger.info(f"[_enhance_html_with_alignment] 从 python-docx 读取到 {len(paragraphs_info)} 个段落")
         for i, p in enumerate(paragraphs_info):
-            logger.debug(f"  [{i}] text={p['text'][:20]}..., styles='{p['styles']}'")
+            logger.info(f"  [{i}] text={p['text'][:30]}..., styles='{p['styles']}'")
         
         if not paragraphs_info:
+            logger.warning("[_enhance_html_with_alignment] 没有找到任何段落信息")
             return html_content
-        
-        used_indices = set()
         
         def add_styles_to_tag(match):
             tag = match.group(1)
@@ -956,37 +955,31 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
             
             content_clean = re.sub(r'<[^>]+>', '', content).strip()
             
-            para_info = None
+            logger.debug(f"[_enhance_html_with_alignment] 处理标签 <{tag}>, 内容: {content_clean[:40]}...")
             
-            for i, p in enumerate(paragraphs_info):
-                if i not in used_indices:
-                    para_text = p['text']
-                    content_normalized = _normalize_text(content_clean)
-                    para_normalized = _normalize_text(para_text)
-                    
-                    if content_normalized == para_normalized:
-                        para_info = p
-                        used_indices.add(i)
-                        break
-                    elif para_normalized and content_normalized:
-                        if para_normalized in content_normalized or content_normalized in para_normalized:
-                            para_info = p
-                            used_indices.add(i)
-                            break
+            unused_paragraphs = [p for p in paragraphs_info if not p['used']]
             
-            if para_info and para_info['styles']:
-                logger.debug(f"[_enhance_html_with_alignment] 为段落 '{content_clean[:20]}...' 应用样式: {para_info['styles']}")
-                if 'style=' in existing_attrs:
-                    existing_attrs = re.sub(
-                        r'style="([^"]*)"',
-                        f'style="\\1 {para_info["styles"]}"',
-                        existing_attrs
-                    )
-                else:
-                    existing_attrs = f' style="{para_info["styles"]}" {existing_attrs}'
+            para_info = _find_best_match(content_clean, unused_paragraphs)
+            
+            if para_info:
+                para_info['used'] = True
+                logger.info(f"[_enhance_html_with_alignment] 找到匹配段落: '{para_info['text'][:30]}...', 样式: '{para_info['styles']}'")
+                
+                if para_info['styles']:
+                    if 'style=' in existing_attrs:
+                        existing_attrs = re.sub(
+                            r'style="([^"]*)"',
+                            f'style="\\1 {para_info["styles"]}"',
+                            existing_attrs
+                        )
+                    else:
+                        existing_attrs = f' style="{para_info["styles"]}" {existing_attrs}'
+            else:
+                logger.warning(f"[_enhance_html_with_alignment] 未找到匹配段落: '{content_clean[:40]}...'")
             
             return f'<{tag}{existing_attrs.strip()}>{content}</{tag}>'
         
+        logger.info("[_enhance_html_with_alignment] 开始增强 HTML 样式...")
         html_content = re.sub(
             r'<(h[1-6]|p|li)([^>]*)>(.*?)</\1>',
             add_styles_to_tag,
@@ -994,10 +987,13 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
             flags=re.DOTALL | re.IGNORECASE
         )
         
+        used_count = sum(1 for p in paragraphs_info if p['used'])
+        logger.info(f"[_enhance_html_with_alignment] 样式增强完成，共匹配 {used_count}/{len(paragraphs_info)} 个段落")
+        
         return html_content
         
     except Exception as e:
-        logger.warning(f"[_enhance_html_with_alignment] 增强段落样式失败: {e}")
+        logger.error(f"[_enhance_html_with_alignment] 增强段落样式失败: {e}")
         import traceback
         traceback.print_exc()
         return html_content
@@ -1011,23 +1007,8 @@ def parse_docx_with_mammoth(file_path: str) -> tuple[str, str]:
     logger.info(f"[parse_docx_with_mammoth] 使用 mammoth 解析: {file_path}")
     
     try:
-        style_map = """
-b => b
-i => i
-u => u
-strikethrough => s
-heading 1 => h1
-heading 2 => h2
-heading 3 => h3
-heading 4 => h4
-heading 5 => h5
-heading 6 => h6
-list paragraph => p:unordered-list-item
-numbered paragraph => p:ordered-list-item
-"""
-        
         with open(file_path, "rb") as docx_file:
-            result = mammoth.convert_to_html(docx_file, style_map=style_map)
+            result = mammoth.convert_to_html(docx_file)
             html_content = result.value
             messages = result.messages
             
