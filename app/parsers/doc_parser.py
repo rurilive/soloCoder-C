@@ -870,6 +870,56 @@ def extract_text_from_doc(file_path: str) -> str:
         return ""
 
 
+def _normalize_text(text: str) -> str:
+    """
+    标准化文本用于比较：移除空格、标点、大小写
+    """
+    if not text:
+        return ""
+    text = re.sub(r'\s+', '', text)
+    text = re.sub(r'[，。、；：""''（）【】《》！？\.\,\;\:\'\"\(\)\[\]\<\>\!\?]', '', text)
+    return text.lower()
+
+
+def _find_best_match(html_text: str, paragraphs_info: list) -> dict:
+    """
+    在段落信息列表中找到最佳匹配的段落
+    """
+    if not html_text:
+        return None
+    
+    html_normalized = _normalize_text(html_text)
+    if not html_normalized:
+        return None
+    
+    best_match = None
+    best_score = 0
+    
+    for para_info in paragraphs_info:
+        para_text = para_info.get('text', '')
+        para_normalized = _normalize_text(para_text)
+        
+        if not para_normalized:
+            continue
+        
+        score = 0
+        if html_normalized == para_normalized:
+            score = 100
+        elif para_normalized in html_normalized or html_normalized in para_normalized:
+            score = 50
+        else:
+            min_len = min(len(html_normalized), len(para_normalized))
+            if min_len > 0:
+                common_chars = sum(1 for c in html_normalized if c in para_normalized)
+                score = (common_chars / min_len) * 30
+        
+        if score > best_score and score > 10:
+            best_score = score
+            best_match = para_info
+    
+    return best_match
+
+
 def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
     """
     使用 python-docx 读取对齐和缩进信息，并增强 mammoth 生成的 HTML
@@ -886,11 +936,18 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
                     'text': text,
                     'styles': styles,
                     'alignment': para.alignment,
-                    'indent': para.paragraph_format.first_line_indent
+                    'indent': para.paragraph_format.first_line_indent,
+                    'used': False
                 })
+        
+        logger.debug(f"[_enhance_html_with_alignment] 从 python-docx 读取到 {len(paragraphs_info)} 个段落")
+        for i, p in enumerate(paragraphs_info):
+            logger.debug(f"  [{i}] text={p['text'][:20]}..., styles='{p['styles']}'")
         
         if not paragraphs_info:
             return html_content
+        
+        used_indices = set()
         
         def add_styles_to_tag(match):
             tag = match.group(1)
@@ -899,21 +956,36 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
             
             content_clean = re.sub(r'<[^>]+>', '', content).strip()
             
-            for para_info in paragraphs_info:
-                para_text = para_info['text']
-                if para_text and content_clean and (para_text in content_clean or content_clean in para_text):
-                    if para_info['styles']:
-                        if 'style=' in existing_attrs:
-                            existing_attrs = re.sub(
-                                r'style="([^"]*)"',
-                                f'style="\\1 {para_info["styles"]}"',
-                                existing_attrs
-                            )
-                        else:
-                            existing_attrs = f' style="{para_info["styles"]}" {existing_attrs}'
-                    break
+            para_info = None
             
-            return f'<{tag}{existing_attrs}>{content}</{tag}>'
+            for i, p in enumerate(paragraphs_info):
+                if i not in used_indices:
+                    para_text = p['text']
+                    content_normalized = _normalize_text(content_clean)
+                    para_normalized = _normalize_text(para_text)
+                    
+                    if content_normalized == para_normalized:
+                        para_info = p
+                        used_indices.add(i)
+                        break
+                    elif para_normalized and content_normalized:
+                        if para_normalized in content_normalized or content_normalized in para_normalized:
+                            para_info = p
+                            used_indices.add(i)
+                            break
+            
+            if para_info and para_info['styles']:
+                logger.debug(f"[_enhance_html_with_alignment] 为段落 '{content_clean[:20]}...' 应用样式: {para_info['styles']}")
+                if 'style=' in existing_attrs:
+                    existing_attrs = re.sub(
+                        r'style="([^"]*)"',
+                        f'style="\\1 {para_info["styles"]}"',
+                        existing_attrs
+                    )
+                else:
+                    existing_attrs = f' style="{para_info["styles"]}" {existing_attrs}'
+            
+            return f'<{tag}{existing_attrs.strip()}>{content}</{tag}>'
         
         html_content = re.sub(
             r'<(h[1-6]|p|li)([^>]*)>(.*?)</\1>',
@@ -926,6 +998,8 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
         
     except Exception as e:
         logger.warning(f"[_enhance_html_with_alignment] 增强段落样式失败: {e}")
+        import traceback
+        traceback.print_exc()
         return html_content
 
 
