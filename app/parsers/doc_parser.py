@@ -102,6 +102,42 @@ def _get_alignment_style(alignment) -> str:
     return alignment_map.get(alignment, "")
 
 
+def _get_indent_style(first_line_indent) -> str:
+    """
+    将 python-docx 的首行缩进值转换为 CSS text-indent 样式
+    返回: CSS 样式字符串，如 "text-indent: 2em;"，如果没有缩进则返回空字符串
+    """
+    if first_line_indent is None:
+        return ""
+    
+    try:
+        indent_pt = first_line_indent.pt
+        if indent_pt > 0:
+            indent_em = indent_pt / 12
+            return f"text-indent: {indent_em:.2f}em;"
+    except:
+        pass
+    
+    return ""
+
+
+def _get_paragraph_styles(para) -> str:
+    """
+    获取段落的所有样式（对齐 + 缩进）
+    """
+    styles = []
+    
+    align_style = _get_alignment_style(para.alignment)
+    if align_style:
+        styles.append(align_style)
+    
+    indent_style = _get_indent_style(para.paragraph_format.first_line_indent)
+    if indent_style:
+        styles.append(indent_style)
+    
+    return " ".join(styles)
+
+
 def _is_unicode_word(word_data: bytes) -> bool:
     """
     检测 Word 文档是否使用 Unicode 编码
@@ -836,7 +872,7 @@ def extract_text_from_doc(file_path: str) -> str:
 
 def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
     """
-    使用 python-docx 读取对齐信息，并增强 mammoth 生成的 HTML
+    使用 python-docx 读取对齐和缩进信息，并增强 mammoth 生成的 HTML
     """
     try:
         doc = DocxDocument(file_path)
@@ -845,18 +881,18 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
         for para in doc.paragraphs:
             text = para.text.strip()
             if text:
-                alignment = para.alignment
-                align_style = _get_alignment_style(alignment)
+                styles = _get_paragraph_styles(para)
                 paragraphs_info.append({
                     'text': text,
-                    'align_style': align_style,
-                    'alignment': alignment
+                    'styles': styles,
+                    'alignment': para.alignment,
+                    'indent': para.paragraph_format.first_line_indent
                 })
         
         if not paragraphs_info:
             return html_content
         
-        def add_alignment_to_tag(match):
+        def add_styles_to_tag(match):
             tag = match.group(1)
             existing_attrs = match.group(2) or ''
             content = match.group(3)
@@ -866,22 +902,22 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
             for para_info in paragraphs_info:
                 para_text = para_info['text']
                 if para_text and content_clean and (para_text in content_clean or content_clean in para_text):
-                    if para_info['align_style']:
+                    if para_info['styles']:
                         if 'style=' in existing_attrs:
                             existing_attrs = re.sub(
                                 r'style="([^"]*)"',
-                                f'style="\\1 {para_info["align_style"]}"',
+                                f'style="\\1 {para_info["styles"]}"',
                                 existing_attrs
                             )
                         else:
-                            existing_attrs = f' style="{para_info["align_style"]}" {existing_attrs}'
+                            existing_attrs = f' style="{para_info["styles"]}" {existing_attrs}'
                     break
             
             return f'<{tag}{existing_attrs}>{content}</{tag}>'
         
         html_content = re.sub(
             r'<(h[1-6]|p|li)([^>]*)>(.*?)</\1>',
-            add_alignment_to_tag,
+            add_styles_to_tag,
             html_content,
             flags=re.DOTALL | re.IGNORECASE
         )
@@ -889,7 +925,7 @@ def _enhance_html_with_alignment(html_content: str, file_path: str) -> str:
         return html_content
         
     except Exception as e:
-        logger.warning(f"[_enhance_html_with_alignment] 增强对齐样式失败: {e}")
+        logger.warning(f"[_enhance_html_with_alignment] 增强段落样式失败: {e}")
         return html_content
 
 
