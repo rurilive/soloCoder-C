@@ -93,10 +93,11 @@ def _get_alignment_style(alignment) -> str:
         WD_ALIGN_PARAGRAPH.CENTER: "text-align: center;",
         WD_ALIGN_PARAGRAPH.RIGHT: "text-align: right;",
         WD_ALIGN_PARAGRAPH.JUSTIFY: "text-align: justify;",
-        WD_ALIGN_PARAGRAPH.DISTRIBUTE: "text-align: justify;",
+        WD_ALIGN_PARAGRAPH.DISTRIBUTE: "text-align: justify; text-align-last: justify;",
         WD_ALIGN_PARAGRAPH.JUSTIFY_MED: "text-align: justify;",
         WD_ALIGN_PARAGRAPH.JUSTIFY_HI: "text-align: justify;",
         WD_ALIGN_PARAGRAPH.JUSTIFY_LOW: "text-align: justify;",
+        WD_ALIGN_PARAGRAPH.THAI_JUSTIFY: "text-align: justify;",
     }
     
     return alignment_map.get(alignment, "")
@@ -123,7 +124,7 @@ def _get_indent_style(first_line_indent) -> str:
 
 def _get_paragraph_styles(para) -> str:
     """
-    获取段落的所有样式（对齐 + 缩进）
+    获取段落的所有样式（对齐 + 缩进 + 间距）
     """
     styles = []
     
@@ -131,9 +132,55 @@ def _get_paragraph_styles(para) -> str:
     if align_style:
         styles.append(align_style)
     
-    indent_style = _get_indent_style(para.paragraph_format.first_line_indent)
-    if indent_style:
-        styles.append(indent_style)
+    pf = para.paragraph_format
+    
+    first_line_indent = pf.first_line_indent
+    if first_line_indent is not None:
+        try:
+            indent_pt = first_line_indent.pt
+            if indent_pt > 0:
+                indent_em = indent_pt / 12
+                styles.append(f"text-indent: {indent_em:.2f}em;")
+        except:
+            pass
+    
+    left_indent = pf.left_indent
+    if left_indent is not None:
+        try:
+            indent_pt = left_indent.pt
+            if indent_pt > 0:
+                indent_em = indent_pt / 12
+                styles.append(f"margin-left: {indent_em:.2f}em;")
+        except:
+            pass
+    
+    right_indent = pf.right_indent
+    if right_indent is not None:
+        try:
+            indent_pt = right_indent.pt
+            if indent_pt > 0:
+                indent_em = indent_pt / 12
+                styles.append(f"margin-right: {indent_em:.2f}em;")
+        except:
+            pass
+    
+    space_before = pf.space_before
+    if space_before is not None:
+        try:
+            pt = space_before.pt
+            if pt > 0:
+                styles.append(f"margin-top: {pt:.1f}pt;")
+        except:
+            pass
+    
+    space_after = pf.space_after
+    if space_after is not None:
+        try:
+            pt = space_after.pt
+            if pt > 0:
+                styles.append(f"margin-bottom: {pt:.1f}pt;")
+        except:
+            pass
     
     return " ".join(styles)
 
@@ -1036,22 +1083,12 @@ def parse_docx_with_mammoth(file_path: str) -> tuple[str, str]:
         raise
 
 
-def parse_docx(file_path: str) -> tuple[str, str]:
+def parse_docx_with_python_docx(file_path: str) -> tuple[str, str]:
     """
-    解析 .docx 文件（Open XML格式）
-    优先使用 mammoth（保留格式），备选使用 python-docx
+    使用 python-docx 解析 .docx 文件（保留完整格式：对齐、缩进、间距等）
     """
-    logger.info(f"[parse_docx] 开始解析 .docx 文件: {file_path}")
+    logger.info(f"[parse_docx_with_python_docx] 使用 python-docx 解析: {file_path}")
     
-    if HAS_MAMMOTH:
-        try:
-            return parse_docx_with_mammoth(file_path)
-        except Exception as e:
-            logger.warning(f"[parse_docx] mammoth 解析失败，回退到 python-docx: {e}")
-    else:
-        logger.warning("[parse_docx] mammoth 不可用，使用 python-docx")
-    
-    logger.info("[parse_docx] 使用 python-docx 解析")
     doc = DocxDocument(file_path)
     
     content_parts = []
@@ -1059,36 +1096,38 @@ def parse_docx(file_path: str) -> tuple[str, str]:
     
     for para in doc.paragraphs:
         text = para.text.strip()
-        if text:
-            content_parts.append(text)
-            
-            style = para.style.name.lower()
-            alignment = para.alignment
-            align_style = _get_alignment_style(alignment)
-            
-            logger.debug(f"[parse_docx] 段落样式: {style}, 对齐: {alignment}, 内容: {text[:30]}...")
-            
-            style_attr = f' style="{align_style}"' if align_style else ''
-            
-            if 'heading 1' in style:
-                html_parts.append(f"<h1{style_attr}>{text}</h1>")
-            elif 'heading 2' in style:
-                html_parts.append(f"<h2{style_attr}>{text}</h2>")
-            elif 'heading 3' in style:
-                html_parts.append(f"<h3{style_attr}>{text}</h3>")
-            elif 'heading 4' in style:
-                html_parts.append(f"<h4{style_attr}>{text}</h4>")
-            elif 'heading 5' in style:
-                html_parts.append(f"<h5{style_attr}>{text}</h5>")
-            elif 'heading 6' in style:
-                html_parts.append(f"<h6{style_attr}>{text}</h6>")
-            elif 'list' in style or 'bullet' in style:
-                html_parts.append(f"<li{style_attr}>{text}</li>")
-            else:
-                html_parts.append(f"<p{style_attr}>{text}</p>")
+        if not text:
+            continue
+        
+        content_parts.append(text)
+        
+        style_name = para.style.name.lower() if para.style.name else ''
+        
+        full_styles = _get_paragraph_styles(para)
+        
+        logger.info(f"[parse_docx_with_python_docx] 段落: 样式='{para.style.name}', 对齐={para.alignment}, 样式='{full_styles}', 内容='{text[:40]}...'")
+        
+        style_attr = f' style="{full_styles}"' if full_styles else ''
+        
+        if 'heading 1' in style_name:
+            html_parts.append(f"<h1{style_attr}>{text}</h1>")
+        elif 'heading 2' in style_name:
+            html_parts.append(f"<h2{style_attr}>{text}</h2>")
+        elif 'heading 3' in style_name:
+            html_parts.append(f"<h3{style_attr}>{text}</h3>")
+        elif 'heading 4' in style_name:
+            html_parts.append(f"<h4{style_attr}>{text}</h4>")
+        elif 'heading 5' in style_name:
+            html_parts.append(f"<h5{style_attr}>{text}</h5>")
+        elif 'heading 6' in style_name:
+            html_parts.append(f"<h6{style_attr}>{text}</h6>")
+        elif 'list' in style_name or 'bullet' in style_name:
+            html_parts.append(f"<li{style_attr}>{text}</li>")
+        else:
+            html_parts.append(f"<p{style_attr}>{text}</p>")
     
     for table in doc.tables:
-        logger.info(f"[parse_docx] 发现表格")
+        logger.info(f"[parse_docx_with_python_docx] 发现表格")
         html_table = "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse;'>"
         for row in table.rows:
             html_table += "<tr>"
@@ -1103,9 +1142,35 @@ def parse_docx(file_path: str) -> tuple[str, str]:
     content = "\n\n".join(content_parts)
     html_content = "\n".join(html_parts)
     
-    logger.info(f"[parse_docx] 解析完成，content长度: {len(content)}, html长度: {len(html_content)}")
+    logger.info(f"[parse_docx_with_python_docx] 解析完成，content长度: {len(content)}, html长度: {len(html_content)}")
     
     return content, html_content
+
+
+def parse_docx(file_path: str) -> tuple[str, str]:
+    """
+    解析 .docx 文件（Open XML格式）
+    优先使用 python-docx（保留完整格式：对齐、缩进、间距等）
+    备选使用 mammoth（语义化 HTML，但不保留视觉格式）
+    """
+    logger.info(f"[parse_docx] 开始解析 .docx 文件: {file_path}")
+    
+    try:
+        return parse_docx_with_python_docx(file_path)
+    except Exception as e:
+        logger.error(f"[parse_docx] python-docx 解析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        if HAS_MAMMOTH:
+            logger.warning("[parse_docx] 回退到 mammoth 解析（注意：mammoth 不保留对齐、缩进等视觉格式）")
+            try:
+                return parse_docx_with_mammoth(file_path)
+            except Exception as e2:
+                logger.error(f"[parse_docx] mammoth 解析也失败: {e2}")
+                raise
+    
+    raise Exception("所有解析方案都失败")
 
 
 def parse_old_doc(file_path: str) -> tuple[str, str]:
