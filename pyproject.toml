@@ -18,6 +18,7 @@ dependencies = [
     "pyantiword>=0.1.2",
     "chardet>=7.4.3",
     "mammoth>=1.12.0",
+    "cmi-docx>=0.5.1",
 ]
 
 [project.optional-dependencies]
