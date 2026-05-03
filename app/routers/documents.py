@@ -7,7 +7,16 @@ from pathlib import Path
 
 from app.database import get_db
 from app.models import Document, Folder
-from app.utils import parse_file, get_file_type
+from app.utils import (
+    parse_file, 
+    get_file_type,
+    parse_excel_file,
+    update_cell_in_excel,
+    update_multiple_cells,
+    add_new_sheet,
+    delete_sheet,
+    get_sheet_data_as_json,
+)
 
 router = APIRouter()
 
@@ -231,3 +240,240 @@ async def reparse_document(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"重新解析失败: {str(e)}")
+
+
+class CellUpdate(BaseModel):
+    sheet_name: str
+    row: int
+    col: int
+    value: Optional[Any] = None
+
+
+class BatchCellUpdate(BaseModel):
+    updates: List[CellUpdate]
+
+
+class SheetOperation(BaseModel):
+    sheet_name: str
+
+
+@router.get("/{doc_id}/excel/data")
+async def get_excel_data(
+    doc_id: int,
+    sheet_name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    获取Excel文件的详细数据（JSON格式）
+    仅适用于Excel类型的文档
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        data = get_sheet_data_as_json(str(file_path), sheet_name)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取Excel数据失败: {str(e)}")
+
+
+@router.put("/{doc_id}/excel/cell")
+async def update_excel_cell(
+    doc_id: int,
+    update: CellUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    更新Excel文件中指定单元格的值
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = update_cell_in_excel(
+        str(file_path),
+        update.sheet_name,
+        update.row,
+        update.col,
+        update.value
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="更新单元格失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "单元格更新成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.put("/{doc_id}/excel/cells")
+async def update_excel_cells_batch(
+    doc_id: int,
+    batch_update: BatchCellUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    批量更新Excel文件中的多个单元格
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    updates_list = [
+        {
+            "sheet_name": u.sheet_name,
+            "row": u.row,
+            "col": u.col,
+            "value": u.value
+        }
+        for u in batch_update.updates
+    ]
+    
+    success = update_multiple_cells(str(file_path), updates_list)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="批量更新单元格失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"成功更新 {len(batch_update.updates)} 个单元格",
+        "updated_count": len(batch_update.updates),
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/excel/sheet")
+async def add_excel_sheet(
+    doc_id: int,
+    operation: SheetOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    在Excel文件中添加新工作表
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = add_new_sheet(str(file_path), operation.sheet_name)
+    
+    if not success:
+        raise HTTPException(status_code=400, detail=f"添加工作表失败，可能工作表名称 '{operation.sheet_name}' 已存在")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"工作表 '{operation.sheet_name}' 添加成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.delete("/{doc_id}/excel/sheet")
+async def delete_excel_sheet(
+    doc_id: int,
+    operation: SheetOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    从Excel文件中删除指定工作表
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = delete_sheet(str(file_path), operation.sheet_name)
+    
+    if not success:
+        raise HTTPException(status_code=400, detail=f"删除工作表失败，可能工作表名称 '{operation.sheet_name}' 不存在或是最后一个工作表")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"工作表 '{operation.sheet_name}' 删除成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }

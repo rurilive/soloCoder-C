@@ -5,7 +5,18 @@ from pathlib import Path
 from datetime import datetime
 from fastapi import UploadFile
 
-from app.parsers import parse_markdown, parse_doc, parse_excel, parse_ppt
+from app.parsers import (
+    parse_markdown, 
+    parse_doc, 
+    parse_excel, 
+    parse_ppt,
+    parse_excel_file,
+    update_cell_in_excel,
+    update_multiple_cells,
+    add_new_sheet,
+    delete_sheet,
+    get_sheet_data_as_json,
+)
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)

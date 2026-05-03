@@ -295,6 +295,152 @@ body {
 .document-actions-header {
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sheet-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+
+.sheet-tab {
+    padding: 8px 16px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    border-radius: 5px 5px 0 0;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.sheet-tab:hover {
+    background: #f0f2ff;
+}
+
+.sheet-tab.active {
+    background: white;
+    border-color: #667eea;
+    border-bottom: 2px solid white;
+    margin-bottom: -2px;
+    font-weight: 600;
+    color: #667eea;
+}
+
+.excel-table-container {
+    overflow-x: auto;
+}
+
+.excel-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+    min-width: 600px;
+}
+
+.excel-table th,
+.excel-table td {
+    border: 1px solid #ddd;
+    padding: 10px 12px;
+    text-align: left;
+    min-width: 80px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.excel-table th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.excel-table td {
+    background: white;
+}
+
+.excel-table tr:hover td {
+    background: #f8f9fa;
+}
+
+.excel-table td[contenteditable="true"] {
+    background: #fff8e1;
+    cursor: text;
+    outline: none;
+}
+
+.excel-table td[contenteditable="true"]:hover {
+    background: #fff3cd;
+    box-shadow: inset 0 0 0 2px #ffc107;
+}
+
+.excel-table td[contenteditable="true"]:focus {
+    background: white;
+    box-shadow: inset 0 0 0 2px #667eea;
+    white-space: normal;
+    overflow: visible;
+}
+
+.cell-number {
+    text-align: right !important;
+    font-family: 'Courier New', monospace;
+    color: #1565c0;
+}
+
+.cell-percentage {
+    text-align: right !important;
+    font-family: 'Courier New', monospace;
+    color: #2e7d32;
+}
+
+.cell-datetime {
+    text-align: center !important;
+    color: #7b1fa2;
+}
+
+.cell-boolean {
+    text-align: center !important;
+    font-weight: 600;
+}
+
+.cell-formula {
+    font-family: 'Courier New', monospace;
+    color: #e65100;
+}
+
+.cell-string {
+    color: #333;
+}
+
+.excel-edit-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+
+.excel-table td[rowspan],
+.excel-table td[colspan] {
+    vertical-align: middle;
+    text-align: center;
+}
+
+.excel-table th[rowspan],
+.excel-table th[colspan] {
+    vertical-align: middle;
+    text-align: center;
 }
 
 .content-section {
