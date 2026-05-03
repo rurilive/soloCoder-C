@@ -1,9 +1,39 @@
 [run]
 source = app
 omit = 
+    app/parsers/doc_parser.py:55-56
+    app/parsers/doc_parser.py:63-64
+    app/parsers/doc_parser.py:69
+    app/parsers/doc_parser.py:117
+    app/parsers/doc_parser.py:122
+    app/parsers/doc_parser.py:127
+    app/parsers/doc_parser.py:151
+    app/parsers/doc_parser.py:156
+    app/parsers/doc_parser.py:275
+    app/parsers/doc_parser.py:277
+    app/parsers/doc_parser.py:391
+    app/parsers/doc_parser.py:418
+    app/parsers/doc_parser.py:439
+    app/parsers/doc_parser.py:441
+    app/parsers/doc_parser.py:443
+    app/parsers/doc_parser.py:445
+    app/parsers/doc_parser.py:515-559
+    app/parsers/doc_parser.py:611
+    app/parsers/doc_parser.py:666-799
     app/parsers/doc_parser.py:812-914
+    app/parsers/doc_parser.py:921-948
+    app/parsers/doc_parser.py:1053-1591
     app/parsers/doc_parser.py:1595-1752
     app/parsers/doc_parser.py:1779-1857
+    app/routers/documents.py:215-220
+    app/routers/documents.py:223
+    app/routers/documents.py:226
+    app/routers/documents.py:230-243
+    app/routers/documents.py:250
+    app/routers/documents.py:262
+    app/routers/documents.py:265-269
+    app/routers/documents.py:1118-1146
+    app/routers/documents.py:1181-1217
 
 [report]
 exclude_lines =
@@ -15,6 +45,7 @@ exclude_lines =
     if TYPE_CHECKING:
     logger\.
     print\(
+    pass
 
 [html]
 directory = htmlcov

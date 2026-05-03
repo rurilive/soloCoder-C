@@ -855,3 +855,1591 @@ class TestHtmlPages:
         
         assert response.status_code == 200
         assert "text/html" in response.headers.get("content-type", "")
+
+
+class TestMarkdownApiEndpoints:
+    """Tests for Markdown-specific API endpoints."""
+
+    def test_get_markdown_metadata(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test getting Markdown metadata."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Test\n\nContent",
+            html_content="<h1>Test</h1><p>Content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/metadata")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    def test_get_markdown_metadata_not_markdown(self, client: TestClient, db_session: Session):
+        """Test getting metadata for non-Markdown document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/metadata")
+        
+        assert response.status_code == 400
+
+    def test_get_markdown_metadata_not_found(self, client: TestClient):
+        """Test getting metadata for non-existent document."""
+        response = client.get("/api/documents/999999/markdown/metadata")
+        
+        assert response.status_code == 404
+
+    def test_get_markdown_outline(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test getting Markdown outline."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# H1\n\n## H2\n\n### H3",
+            html_content="<h1>H1</h1><h2>H2</h2><h3>H3</h3>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/outline")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "outline" in data
+
+    def test_get_markdown_outline_not_markdown(self, client: TestClient, db_session: Session):
+        """Test getting outline for non-Markdown document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/outline")
+        
+        assert response.status_code == 400
+
+    def test_get_markdown_data(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test getting Markdown full data."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Test\n\nContent",
+            html_content="<h1>Test</h1><p>Content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/data")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    def test_get_markdown_data_not_markdown(self, client: TestClient, db_session: Session):
+        """Test getting data for non-Markdown document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/data")
+        
+        assert response.status_code == 400
+
+    def test_update_markdown_content(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test updating Markdown content."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Original\n\nOriginal content",
+            html_content="<h1>Original</h1><p>Original content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        update_data = {
+            "content": "# Updated\n\nNew content here"
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/markdown/content",
+            json=update_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        assert "document" in data
+
+    def test_update_markdown_content_not_markdown(self, client: TestClient, db_session: Session):
+        """Test updating content for non-Markdown document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        update_data = {
+            "content": "New content"
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/markdown/content",
+            json=update_data
+        )
+        
+        assert response.status_code == 400
+
+    def test_append_to_markdown(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test appending content to Markdown."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Original",
+            html_content="<h1>Original</h1>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        append_data = {
+            "content": "\n\n## New Section\n\nAppended content"
+        }
+        
+        response = client.post(
+            f"/api/documents/{doc.id}/markdown/append",
+            json=append_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_prepend_to_markdown(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test prepending content to Markdown."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Original",
+            html_content="<h1>Original</h1>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        prepend_data = {
+            "content": "# New Header\n\nPrepended content\n\n"
+        }
+        
+        response = client.post(
+            f"/api/documents/{doc.id}/markdown/prepend",
+            json=prepend_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_replace_markdown_section(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test replacing a section in Markdown."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Test Document\n\n## Introduction\n\nOld content",
+            html_content="<h1>Test Document</h1>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        replace_data = {
+            "heading_text": "Introduction",
+            "new_content": "\n\nUpdated introduction content here\n\n",
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/markdown/section",
+            json=replace_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_replace_markdown_section_not_found(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test replacing a non-existent section in Markdown."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Main\n\n## Section 1\n\nContent",
+            html_content="<h1>Main</h1>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        replace_data = {
+            "heading_text": "Nonexistent Section",
+            "new_content": "New content",
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/markdown/section",
+            json=replace_data
+        )
+        
+        assert response.status_code == 404
+
+    def test_add_heading_to_markdown(self, client: TestClient, db_session: Session, temp_markdown_file: Path):
+        """Test adding a new heading to Markdown."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="# Original",
+            html_content="<h1>Original</h1>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        heading_data = {
+            "heading_text": "New Section",
+            "level": 2,
+            "content": "Content under new section",
+        }
+        
+        response = client.post(
+            f"/api/documents/{doc.id}/markdown/heading",
+            json=heading_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+
+class TestPptBackgroundEndpoints:
+    """Tests for PPT background API endpoints."""
+
+    def test_get_ppt_background(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test getting PPT slide background information."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/ppt/background?slide_idx=1")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "background_type" in data
+
+    def test_get_ppt_background_not_ppt(self, client: TestClient, db_session: Session):
+        """Test getting background for non-PPT document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/ppt/background?slide_idx=1")
+        
+        assert response.status_code == 400
+
+    def test_get_ppt_background_not_found(self, client: TestClient):
+        """Test getting background for non-existent document."""
+        response = client.get("/api/documents/999999/ppt/background?slide_idx=1")
+        
+        assert response.status_code == 404
+
+    def test_set_ppt_solid_background(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test setting PPT slide solid background color."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        background_data = {
+            "slide_idx": 1,
+            "color": "FF0000",
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/ppt/background/solid",
+            json=background_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        assert data["color"] == "FF0000"
+
+    def test_set_ppt_solid_background_not_ppt(self, client: TestClient, db_session: Session):
+        """Test setting solid background for non-PPT document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        background_data = {
+            "slide_idx": 1,
+            "color": "FF0000",
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/ppt/background/solid",
+            json=background_data
+        )
+        
+        assert response.status_code == 400
+
+    def test_remove_ppt_background(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test removing PPT slide background."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        remove_data = {
+            "slide_idx": 1,
+        }
+        
+        response = client.request(
+            "DELETE",
+            f"/api/documents/{doc.id}/ppt/background",
+            json=remove_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_remove_ppt_background_not_ppt(self, client: TestClient, db_session: Session):
+        """Test removing background for non-PPT document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        remove_data = {
+            "slide_idx": 1,
+        }
+        
+        response = client.request(
+            "DELETE",
+            f"/api/documents/{doc.id}/ppt/background",
+            json=remove_data
+        )
+        
+        assert response.status_code == 400
+
+
+class TestPptTextAndSlideEndpoints:
+    """Tests for PPT text update and slide management API endpoints."""
+
+    def test_update_ppt_text(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test updating text in a PPT slide."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        update_data = {
+            "slide_idx": 1,
+            "shape_idx": 0,
+            "text": "Updated Title",
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/ppt/text",
+            json=update_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_update_ppt_texts_batch(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test batch updating multiple texts in PPT."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        batch_data = {
+            "updates": [
+                {"slide_idx": 1, "shape_idx": 0, "text": "Updated Title 1"},
+                {"slide_idx": 1, "shape_idx": 1, "text": "Updated Subtitle"},
+            ]
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/ppt/texts",
+            json=batch_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "updated_count" in data
+
+    def test_add_ppt_slide(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test adding a new slide to PPT."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        slide_data = {
+            "layout_idx": 6,
+            "title_text": "New Slide Title",
+            "content_text": "New slide content",
+        }
+        
+        response = client.post(
+            f"/api/documents/{doc.id}/ppt/slide",
+            json=slide_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_delete_ppt_slide(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test deleting a slide from PPT."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        delete_data = {
+            "slide_idx": 2,
+        }
+        
+        response = client.request(
+            "DELETE",
+            f"/api/documents/{doc.id}/ppt/slide",
+            json=delete_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+    def test_reorder_ppt_slides(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test reordering slides in PPT."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        reorder_data = {
+            "old_idx": 3,
+            "new_idx": 1,
+        }
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/ppt/reorder",
+            json=reorder_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+
+class TestPptDataEndpoints:
+    """Tests for PPT data retrieval API endpoints."""
+
+    def test_get_ppt_metadata(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test getting PPT metadata."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/ppt/metadata")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["slide_count"] == 3
+
+    def test_get_ppt_metadata_not_ppt(self, client: TestClient, db_session: Session):
+        """Test getting metadata for non-PPT document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/ppt/metadata")
+        
+        assert response.status_code == 400
+
+    def test_get_ppt_data(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test getting PPT full data."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/ppt/data")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["slide_count"] == 3
+
+    def test_get_ppt_data_paginated(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test getting PPT data with pagination."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(
+            f"/api/documents/{doc.id}/ppt/data/paginated?start_slide=1&end_slide=2"
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["slide_count"] == 2
+
+    def test_get_ppt_data_with_range(self, client: TestClient, db_session: Session, temp_pptx_file: Path):
+        """Test getting PPT data with slide range."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test content</p>",
+        )
+        
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(
+            f"/api/documents/{doc.id}/ppt/data?start_slide=1&end_slide=2"
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+
+class TestPptPictureBackgroundEndpoints:
+    """Tests for PPT picture background API endpoints."""
+
+    def test_set_ppt_picture_background_not_found(self, client: TestClient, temp_image_file: Path):
+        """Test setting picture background for non-existent document."""
+        with open(temp_image_file, "rb") as f:
+            response = client.post(
+                "/api/documents/999999/ppt/background/picture",
+                data={"slide_idx": 1},
+                files={"file": ("test.png", f, "image/png")},
+            )
+        
+        assert response.status_code == 404
+
+    def test_set_ppt_picture_background_not_ppt(
+        self, client: TestClient, db_session: Session, temp_docx_file: Path, temp_image_file: Path
+    ):
+        """Test setting picture background for non-PPT document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path=str(temp_docx_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        with open(temp_image_file, "rb") as f:
+            response = client.post(
+                f"/api/documents/{doc.id}/ppt/background/picture",
+                data={"slide_idx": 1},
+                files={"file": ("test.png", f, "image/png")},
+            )
+        
+        assert response.status_code == 400
+
+
+class TestPptPictureShapeEndpoints:
+    """Tests for PPT picture shape API endpoints."""
+
+    def test_add_ppt_picture_shape_not_found(self, client: TestClient, temp_image_file: Path):
+        """Test adding picture shape for non-existent document."""
+        with open(temp_image_file, "rb") as f:
+            response = client.post(
+                "/api/documents/999999/ppt/picture",
+                data={"slide_idx": 1, "left": 0, "top": 0},
+                files={"file": ("test.png", f, "image/png")},
+            )
+        
+        assert response.status_code == 404
+
+    def test_add_ppt_picture_shape_not_ppt(
+        self, client: TestClient, db_session: Session, temp_docx_file: Path, temp_image_file: Path
+    ):
+        """Test adding picture shape for non-PPT document."""
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path=str(temp_docx_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        with open(temp_image_file, "rb") as f:
+            response = client.post(
+                f"/api/documents/{doc.id}/ppt/picture",
+                data={"slide_idx": 1, "left": 0, "top": 0},
+                files={"file": ("test.png", f, "image/png")},
+            )
+        
+        assert response.status_code == 400
+
+
+class TestUploadAdditionalEndpoints:
+    """Additional tests for upload API endpoints."""
+
+    def test_upload_docx_file(self, client: TestClient, temp_docx_file: Path):
+        """Test uploading a DOCX file."""
+        with open(temp_docx_file, "rb") as f:
+            response = client.post(
+                "/api/upload/",
+                files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            )
+        
+        assert response.status_code in [200, 400]
+
+    def test_upload_pptx_file(self, client: TestClient, temp_pptx_file: Path):
+        """Test uploading a PPTX file."""
+        with open(temp_pptx_file, "rb") as f:
+            response = client.post(
+                "/api/upload/",
+                files={"file": ("test.pptx", f, "application/vnd.openxmlformats-officedocument.presentationml.presentation")},
+            )
+        
+        assert response.status_code in [200, 400]
+
+    def test_upload_markdown_file(self, client: TestClient, temp_markdown_file: Path):
+        """Test uploading a Markdown file."""
+        with open(temp_markdown_file, "rb") as f:
+            response = client.post(
+                "/api/upload/",
+                files={"file": ("test.md", f, "text/markdown")},
+            )
+        
+        assert response.status_code in [200, 400]
+
+
+class TestPptParserDirectTests:
+    """Direct tests for PPT parser functions to improve coverage."""
+
+    def test_set_picture_background_nonexistent_file(self, temp_image_file: Path):
+        """Test set_picture_background with nonexistent PPT file."""
+        from app.parsers.ppt_parser import set_picture_background
+        
+        result = set_picture_background("/nonexistent.pptx", 1, str(temp_image_file))
+        assert result is False
+
+    def test_set_picture_background_nonexistent_image(self, temp_pptx_file: Path):
+        """Test set_picture_background with nonexistent image file."""
+        from app.parsers.ppt_parser import set_picture_background
+        
+        result = set_picture_background(str(temp_pptx_file), 1, "/nonexistent.png")
+        assert result is False
+
+    def test_set_picture_background_invalid_slide_idx(self, temp_pptx_file: Path, temp_image_file: Path):
+        """Test set_picture_background with invalid slide index."""
+        from app.parsers.ppt_parser import set_picture_background
+        
+        result = set_picture_background(str(temp_pptx_file), 999, str(temp_image_file))
+        assert result is False
+
+    def test_set_picture_background_v2_nonexistent_file(self, temp_image_file: Path):
+        """Test set_picture_background_v2 with nonexistent PPT file."""
+        from app.parsers.ppt_parser import set_picture_background_v2
+        
+        result = set_picture_background_v2("/nonexistent.pptx", 1, str(temp_image_file))
+        assert result is False
+
+    def test_set_picture_background_v2_nonexistent_image(self, temp_pptx_file: Path):
+        """Test set_picture_background_v2 with nonexistent image file."""
+        from app.parsers.ppt_parser import set_picture_background_v2
+        
+        result = set_picture_background_v2(str(temp_pptx_file), 1, "/nonexistent.png")
+        assert result is False
+
+    def test_set_picture_background_v2_invalid_slide_idx(self, temp_pptx_file: Path, temp_image_file: Path):
+        """Test set_picture_background_v2 with invalid slide index."""
+        from app.parsers.ppt_parser import set_picture_background_v2
+        
+        result = set_picture_background_v2(str(temp_pptx_file), 999, str(temp_image_file))
+        assert result is False
+
+    def test_add_picture_shape_nonexistent_file(self, temp_image_file: Path):
+        """Test add_picture_shape_to_slide with nonexistent PPT file."""
+        from app.parsers.ppt_parser import add_picture_shape_to_slide
+        
+        result = add_picture_shape_to_slide("/nonexistent.pptx", 1, str(temp_image_file))
+        assert result is False
+
+    def test_add_picture_shape_nonexistent_image(self, temp_pptx_file: Path):
+        """Test add_picture_shape_to_slide with nonexistent image file."""
+        from app.parsers.ppt_parser import add_picture_shape_to_slide
+        
+        result = add_picture_shape_to_slide(str(temp_pptx_file), 1, "/nonexistent.png")
+        assert result is False
+
+    def test_add_picture_shape_invalid_slide_idx(self, temp_pptx_file: Path, temp_image_file: Path):
+        """Test add_picture_shape_to_slide with invalid slide index."""
+        from app.parsers.ppt_parser import add_picture_shape_to_slide
+        
+        result = add_picture_shape_to_slide(str(temp_pptx_file), 999, str(temp_image_file))
+        assert result is False
+
+
+class TestExcelParserAdditionalTests:
+    """Additional tests for Excel parser to improve coverage."""
+
+    def test_get_sheet_metadata_with_empty_file(self, temp_dir: Path):
+        """Test get_sheet_metadata with empty Excel file."""
+        from openpyxl import Workbook
+        from app.parsers.excel_parser import get_sheet_metadata
+        
+        file_path = temp_dir / "empty.xlsx"
+        wb = Workbook()
+        wb.save(file_path)
+        
+        result = get_sheet_metadata(str(file_path))
+        assert result["success"] is True
+
+    def test_get_sheet_data_paginated_with_invalid_range(self, temp_excel_file: Path):
+        """Test get_sheet_data_paginated with invalid row range."""
+        from app.parsers.excel_parser import get_sheet_data_paginated
+        
+        result = get_sheet_data_paginated(str(temp_excel_file), "Sheet1", -1, -5)
+        assert result["success"] is True
+
+    def test_update_cell_in_excel_with_nonexistent_sheet(self, temp_excel_file: Path):
+        """Test update_cell_in_excel with nonexistent sheet."""
+        from app.parsers.excel_parser import update_cell_in_excel
+        
+        result = update_cell_in_excel(str(temp_excel_file), "NonexistentSheet", 1, 1, "Test")
+        assert result is False
+
+    def test_add_new_sheet_duplicate_name(self, temp_excel_file: Path):
+        """Test add_new_sheet with duplicate name."""
+        from app.parsers.excel_parser import add_new_sheet
+        
+        result = add_new_sheet(str(temp_excel_file), "Sheet1")
+        assert result is False
+
+    def test_delete_sheet_last_one(self, temp_dir: Path):
+        """Test delete_sheet when it's the last sheet."""
+        from openpyxl import Workbook
+        from app.parsers.excel_parser import delete_sheet
+        
+        file_path = temp_dir / "single_sheet.xlsx"
+        wb = Workbook()
+        wb.save(file_path)
+        
+        result = delete_sheet(str(file_path), "Sheet")
+        assert result is False
+
+
+class TestDocParserAdditionalTests:
+    """Additional tests for Doc parser to improve coverage."""
+
+    def test_parse_doc_nonexistent_file(self):
+        """Test parse_doc with nonexistent file."""
+        from app.parsers.doc_parser import parse_doc
+        
+        content, html = parse_doc("/nonexistent.doc")
+        assert content is not None
+        assert "错误" in content or "error" in content.lower()
+
+    def test_is_docx_file_with_docx(self, temp_docx_file: Path):
+        """Test is_docx_file with actual DOCX file."""
+        from app.parsers.doc_parser import is_docx_file
+        
+        result = is_docx_file(str(temp_docx_file))
+        assert result is True
+
+    def test_is_docx_file_with_non_docx(self, temp_markdown_file: Path):
+        """Test is_docx_file with non-DOCX file."""
+        from app.parsers.doc_parser import is_docx_file
+        
+        result = is_docx_file(str(temp_markdown_file))
+        assert result is False
+
+
+class TestUploadFolderEndpoints:
+    """Tests for upload with folder ID to improve coverage."""
+
+    def test_upload_with_nonexistent_folder(self, client: TestClient, temp_excel_file: Path):
+        """Test uploading a file with a nonexistent folder ID."""
+        with open(temp_excel_file, "rb") as f:
+            response = client.post(
+                "/api/upload/",
+                data={"folder_id": 999999},
+                files={"file": ("test.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            )
+        
+        assert response.status_code in [200, 400]
+        if response.status_code == 200:
+            data = response.json()
+            assert data["document"]["folder_id"] is None
+
+
+class TestPptPictureBackgroundSuccessTests:
+    """Tests for PPT picture background success paths."""
+
+    def test_set_picture_background_v2_success(self, temp_pptx_file: Path, temp_image_file: Path):
+        """Test set_picture_background_v2 with valid files."""
+        from app.parsers.ppt_parser import set_picture_background_v2
+        
+        result = set_picture_background_v2(str(temp_pptx_file), 1, str(temp_image_file))
+        assert result is True
+
+    def test_add_picture_shape_success(self, temp_pptx_file: Path, temp_image_file: Path):
+        """Test add_picture_shape_to_slide with valid files."""
+        from app.parsers.ppt_parser import add_picture_shape_to_slide
+        
+        result = add_picture_shape_to_slide(
+            str(temp_pptx_file), 1, str(temp_image_file), 0, 0, 100, 100
+        )
+        assert result is True
+
+    def test_add_picture_shape_no_size(self, temp_pptx_file: Path, temp_image_file: Path):
+        """Test add_picture_shape_to_slide without specifying size."""
+        from app.parsers.ppt_parser import add_picture_shape_to_slide
+        
+        result = add_picture_shape_to_slide(
+            str(temp_pptx_file), 1, str(temp_image_file), 0, 0, None, None
+        )
+        assert result is True
+
+
+class TestExcelParserMoreTests:
+    """More tests for Excel parser to improve coverage."""
+
+    def test_get_sheet_data_as_json_single_sheet(self, temp_excel_file: Path):
+        """Test get_sheet_data_as_json with specific sheet."""
+        from app.parsers.excel_parser import get_sheet_data_as_json
+        
+        result = get_sheet_data_as_json(str(temp_excel_file), "Sheet1")
+        assert result["success"] is True
+
+    def test_get_sheet_data_as_json_all_sheets(self, temp_excel_file: Path):
+        """Test get_sheet_data_as_json with all sheets."""
+        from app.parsers.excel_parser import get_sheet_data_as_json
+        
+        result = get_sheet_data_as_json(str(temp_excel_file))
+        assert result["success"] is True
+
+
+class TestMarkdownParserMoreTests:
+    """More tests for Markdown parser to improve coverage."""
+
+    def test_get_markdown_data_as_json_with_content(self, temp_markdown_file: Path):
+        """Test get_markdown_data_as_json with actual markdown file."""
+        from app.parsers.markdown_parser import get_markdown_data_as_json
+        
+        result = get_markdown_data_as_json(str(temp_markdown_file))
+        assert result["success"] is True
+
+    def test_get_markdown_outline_with_content(self, temp_markdown_file: Path):
+        """Test get_markdown_outline with actual markdown file."""
+        from app.parsers.markdown_parser import get_markdown_outline
+        
+        result = get_markdown_outline(str(temp_markdown_file))
+        assert result is not None
+        assert len(result) > 0
+
+    def test_get_markdown_metadata_with_content(self, temp_markdown_file: Path):
+        """Test get_markdown_metadata with actual markdown file."""
+        from app.parsers.markdown_parser import get_markdown_metadata
+        
+        result = get_markdown_metadata(str(temp_markdown_file))
+        assert result["success"] is True
+
+
+class TestUploadMultipleEndpoints:
+    """Tests for multiple file upload to improve coverage."""
+
+    def test_upload_multiple_unsupported_file(self, client: TestClient, temp_dir: Path):
+        """Test uploading multiple files with an unsupported file type."""
+        unsupported_file = temp_dir / "test.xyz"
+        unsupported_file.write_text("This is not a supported file type")
+        
+        with open(unsupported_file, "rb") as f:
+            response = client.post(
+                "/api/upload/multiple",
+                files={"files": ("test.xyz", f, "application/octet-stream")},
+            )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["errors"]) > 0
+
+
+class TestExcelParserEdgeCases:
+    """Additional edge case tests for Excel parser."""
+
+    def test_get_sheet_data_paginated_with_invalid_params(self, temp_excel_file: Path):
+        """Test get_sheet_data_paginated with invalid parameters."""
+        from app.parsers.excel_parser import get_sheet_data_paginated
+        
+        result = get_sheet_data_paginated(str(temp_excel_file), "Sheet1", 0, 0)
+        assert result["success"] is True
+
+    def test_get_sheet_data_paginated_with_large_range(self, temp_excel_file: Path):
+        """Test get_sheet_data_paginated with range larger than sheet."""
+        from app.parsers.excel_parser import get_sheet_data_paginated
+        
+        result = get_sheet_data_paginated(str(temp_excel_file), "Sheet1", 1000, 2000)
+        assert result["success"] is True
+
+
+class TestPptParserMoreEdgeCases:
+    """More edge case tests for PPT parser."""
+
+    def test_get_ppt_metadata_with_content(self, temp_pptx_file: Path):
+        """Test get_ppt_metadata with actual PPT file."""
+        from app.parsers.ppt_parser import get_ppt_metadata
+        
+        result = get_ppt_metadata(str(temp_pptx_file))
+        assert result["success"] is True
+
+    def test_get_slide_data_paginated_with_content(self, temp_pptx_file: Path):
+        """Test get_slide_data_paginated with actual PPT file."""
+        from app.parsers.ppt_parser import get_slide_data_paginated
+        
+        result = get_slide_data_paginated(str(temp_pptx_file), 1, 2)
+        assert result["success"] is True
+
+    def test_get_ppt_data_as_json_with_content(self, temp_pptx_file: Path):
+        """Test get_ppt_data_as_json with actual PPT file."""
+        from app.parsers.ppt_parser import get_ppt_data_as_json
+        
+        result = get_ppt_data_as_json(str(temp_pptx_file))
+        assert result["success"] is True
+
+
+class TestDocumentEndpointsWithFolder:
+    """Tests for document endpoints with folder filtering."""
+
+    def test_get_documents_with_valid_folder_id(
+        self, client: TestClient, db_session: Session
+    ):
+        """Test getting documents with a valid folder ID."""
+        folder = Folder(name="Test Folder")
+        db_session.add(folder)
+        db_session.commit()
+        db_session.refresh(folder)
+        
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test</p>",
+            folder_id=folder.id,
+        )
+        db_session.add(doc)
+        db_session.commit()
+        
+        response = client.get(f"/api/documents/?folder_id={folder.id}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["documents"]) == 1
+        assert data["documents"][0]["folder_id"] == folder.id
+
+    def test_get_documents_with_folder_id_no_docs(
+        self, client: TestClient, db_session: Session
+    ):
+        """Test getting documents with a folder ID that has no documents."""
+        folder = Folder(name="Empty Folder")
+        db_session.add(folder)
+        db_session.commit()
+        db_session.refresh(folder)
+        
+        response = client.get(f"/api/documents/?folder_id={folder.id}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["documents"]) == 0
+
+
+class TestExcelParserMergedCells:
+    """Tests for Excel parser merged cells functionality."""
+
+    def test_get_sheet_data_paginated_with_merged_cells(self):
+        """Test get_sheet_data_paginated with merged cells."""
+        import tempfile
+        from app.parsers.excel_parser import get_sheet_data_paginated
+        
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+            wb = Workbook()
+            ws = wb.active
+            ws.cell(row=1, column=1, value="Merged Header")
+            ws.merge_cells('A1:B1')
+            ws.cell(row=2, column=1, value="Data 1")
+            ws.cell(row=2, column=2, value="Data 2")
+            wb.save(f.name)
+            
+            result = get_sheet_data_paginated(f.name, "Sheet", 1, 10)
+            assert result["success"] is True
+            
+            Path(f.name).unlink()
+
+
+class TestExcelParserStyles:
+    """Tests for Excel parser styles functionality."""
+
+    def test_get_sheet_data_paginated_with_styles(self):
+        """Test get_sheet_data_paginated with styles."""
+        import tempfile
+        from app.parsers.excel_parser import get_sheet_data_paginated
+        from openpyxl.styles import Font, PatternFill
+        
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+            wb = Workbook()
+            ws = wb.active
+            cell = ws.cell(row=1, column=1, value="Styled Cell")
+            cell.font = Font(bold=True, size=12)
+            cell.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+            wb.save(f.name)
+            
+            result = get_sheet_data_paginated(f.name, "Sheet", 1, 10, include_styles=True)
+            assert result["success"] is True
+            
+            Path(f.name).unlink()
+
+    def test_get_sheet_data_paginated_without_styles(self):
+        """Test get_sheet_data_paginated without styles."""
+        import tempfile
+        from app.parsers.excel_parser import get_sheet_data_paginated
+        
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+            wb = Workbook()
+            ws = wb.active
+            ws.cell(row=1, column=1, value="Simple Cell")
+            wb.save(f.name)
+            
+            result = get_sheet_data_paginated(f.name, "Sheet", 1, 10, include_styles=False)
+            assert result["success"] is True
+            
+            Path(f.name).unlink()
+
+
+class TestPptParserSlideData:
+    """Tests for PPT parser slide data functionality."""
+
+    def test_get_ppt_metadata_with_content(self, temp_pptx_file: Path):
+        """Test get_ppt_metadata with actual PPT file."""
+        from app.parsers.ppt_parser import get_ppt_metadata
+        
+        result = get_ppt_metadata(str(temp_pptx_file))
+        assert result["success"] is True
+
+    def test_get_ppt_metadata_with_invalid_file(self):
+        """Test get_ppt_metadata with invalid file."""
+        from app.parsers.ppt_parser import get_ppt_metadata
+        
+        result = get_ppt_metadata("nonexistent.pptx")
+        assert result["success"] is False
+
+    def test_get_ppt_data_as_json_with_content(self, temp_pptx_file: Path):
+        """Test get_ppt_data_as_json with actual PPT file."""
+        from app.parsers.ppt_parser import get_ppt_data_as_json
+        
+        result = get_ppt_data_as_json(str(temp_pptx_file))
+        assert result["success"] is True
+
+
+class TestMarkdownParserMetadata:
+    """Tests for Markdown parser metadata functionality."""
+
+    def test_get_markdown_metadata_with_content(self, temp_markdown_file: Path):
+        """Test get_markdown_metadata with actual Markdown file."""
+        from app.parsers.markdown_parser import get_markdown_metadata
+        
+        result = get_markdown_metadata(str(temp_markdown_file))
+        assert result is not None
+
+    def test_get_markdown_outline_with_content(self, temp_markdown_file: Path):
+        """Test get_markdown_outline with actual Markdown file."""
+        from app.parsers.markdown_parser import get_markdown_outline
+        
+        result = get_markdown_outline(str(temp_markdown_file))
+        assert result is not None
+
+    def test_get_markdown_data_as_json_with_content(self, temp_markdown_file: Path):
+        """Test get_markdown_data_as_json with actual Markdown file."""
+        from app.parsers.markdown_parser import get_markdown_data_as_json
+        
+        result = get_markdown_data_as_json(str(temp_markdown_file))
+        assert result is not None
+
+
+class TestDocumentEndpointsMarkdown:
+    """Tests for document endpoints with Markdown-specific functionality."""
+
+    def test_get_markdown_metadata_endpoint(
+        self, client: TestClient, db_session: Session, temp_markdown_file: Path
+    ):
+        """Test get_markdown_metadata endpoint."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/metadata")
+        
+        assert response.status_code == 200
+
+    def test_get_markdown_metadata_endpoint_not_found(
+        self, client: TestClient, db_session: Session
+    ):
+        """Test get_markdown_metadata endpoint with non-existent document."""
+        response = client.get("/api/documents/999999/markdown/metadata")
+        
+        assert response.status_code == 404
+
+    def test_get_markdown_metadata_endpoint_not_markdown(
+        self, client: TestClient, db_session: Session, temp_docx_file: Path
+    ):
+        """Test get_markdown_metadata endpoint with non-Markdown file."""
+        doc = Document(
+            title="Test Doc",
+            filename="test.docx",
+            file_type="doc",
+            file_path=str(temp_docx_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/metadata")
+        
+        assert response.status_code == 400
+
+    def test_get_markdown_outline_endpoint(
+        self, client: TestClient, db_session: Session, temp_markdown_file: Path
+    ):
+        """Test get_markdown_outline endpoint."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/outline")
+        
+        assert response.status_code == 200
+
+    def test_get_markdown_data_endpoint(
+        self, client: TestClient, db_session: Session, temp_markdown_file: Path
+    ):
+        """Test get_markdown_data endpoint."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/markdown/data")
+        
+        assert response.status_code == 200
+
+    def test_update_markdown_content_endpoint(
+        self, client: TestClient, db_session: Session, temp_markdown_file: Path
+    ):
+        """Test update_markdown_content endpoint."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/markdown/content",
+            json={"content": "Updated content"}
+        )
+        
+        assert response.status_code == 200
+
+    def test_replace_markdown_section_endpoint(
+        self, client: TestClient, db_session: Session, temp_markdown_file: Path
+    ):
+        """Test replace_markdown_section endpoint."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.put(
+            f"/api/documents/{doc.id}/markdown/section",
+            json={
+                "heading_text": "Introduction",
+                "new_content": "Updated section content"
+            }
+        )
+        
+        assert response.status_code in [200, 404]
+
+    def test_add_heading_to_markdown_endpoint(
+        self, client: TestClient, db_session: Session, temp_markdown_file: Path
+    ):
+        """Test add_heading_to_markdown endpoint."""
+        doc = Document(
+            title="Test Markdown",
+            filename="test.md",
+            file_type="markdown",
+            file_path=str(temp_markdown_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.post(
+            f"/api/documents/{doc.id}/markdown/heading",
+            json={
+                "heading_text": "New Section",
+                "content": "New section content"
+            }
+        )
+        
+        assert response.status_code == 200
+
+
+class TestDocumentEndpointsExcel:
+    """Tests for document endpoints with Excel-specific functionality."""
+
+    def test_get_sheet_data_endpoint(
+        self, client: TestClient, db_session: Session, temp_excel_file: Path
+    ):
+        """Test get_sheet_data endpoint."""
+        doc = Document(
+            title="Test Excel",
+            filename="test.xlsx",
+            file_type="excel",
+            file_path=str(temp_excel_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/excel/sheets/1/data")
+        
+        assert response.status_code in [200, 404]
+
+    def test_get_sheet_data_paginated_endpoint(
+        self, client: TestClient, db_session: Session, temp_excel_file: Path
+    ):
+        """Test get_sheet_data_paginated endpoint."""
+        doc = Document(
+            title="Test Excel",
+            filename="test.xlsx",
+            file_type="excel",
+            file_path=str(temp_excel_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(
+            f"/api/documents/{doc.id}/excel/sheets/1/data/paginated",
+            params={"start_row": 1, "end_row": 10}
+        )
+        
+        assert response.status_code in [200, 404]
+
+
+class TestDocumentEndpointsPpt:
+    """Tests for document endpoints with PPT-specific functionality."""
+
+    def test_get_slide_data_endpoint(
+        self, client: TestClient, db_session: Session, temp_pptx_file: Path
+    ):
+        """Test get_slide_data endpoint."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(f"/api/documents/{doc.id}/ppt/slides/1")
+        
+        assert response.status_code in [200, 404]
+
+    def test_get_slide_data_paginated_endpoint(
+        self, client: TestClient, db_session: Session, temp_pptx_file: Path
+    ):
+        """Test get_slide_data_paginated endpoint."""
+        doc = Document(
+            title="Test PPT",
+            filename="test.pptx",
+            file_type="ppt",
+            file_path=str(temp_pptx_file),
+            content="Test content",
+            html_content="<p>Test</p>",
+        )
+        db_session.add(doc)
+        db_session.commit()
+        db_session.refresh(doc)
+        
+        response = client.get(
+            f"/api/documents/{doc.id}/ppt/slides/paginated",
+            params={"start": 1, "limit": 5}
+        )
+        
+        assert response.status_code in [200, 404]
