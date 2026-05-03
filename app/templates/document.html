@@ -278,44 +278,324 @@
         
         let html = text;
         
-        html = html.replace(/^### (.*?)$/gim, '<h3>$1</h3>');
-        html = html.replace(/^## (.*?)$/gim, '<h2>$1</h2>');
-        html = html.replace(/^# (.*?)$/gim, '<h1>$1</h1>');
+        html = html.replace(/\r\n/g, '\n');
         
-        html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
-        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-        
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-        
-        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;">');
-        
-        html = html.replace(/^```(\w*)\n([\s\S]*?)```$/gim, '<pre><code class="language-$1">$2</code></pre>');
-        
-        html = html.replace(/^> (.*?)$/gim, '<blockquote>$1</blockquote>');
-        
-        html = html.replace(/^(\d+)\. (.*?)$/gim, '<li>$2</li>');
-        html = html.replace(/(<li>.*?<\/li>\n?)+/g, function(match) {
-            return '<ol>' + match + '</ol>';
+        const codeBlocks = [];
+        html = html.replace(/^```(\w*)\n([\s\S]*?)```$/gim, function(match, lang, code, offset) {
+            const id = 'CODEBLOCK_' + codeBlocks.length;
+            codeBlocks.push({ lang: lang || '', code: code });
+            return id + '\n';
         });
         
-        html = html.replace(/^[-*+] (.*?)$/gim, '<li>$1</li>');
-        html = html.replace(/(<li>.*?<\/li>\n?)+/g, function(match) {
-            if (!match.includes('<ol>') && !match.includes('</ol>')) {
-                return '<ul>' + match + '</ul>';
+        const htmlEscapes = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, function(match) {
+                return htmlEscapes[match];
+            });
+        }
+        
+        function parseInlineElements(str) {
+            let result = str;
+            
+            result = result.replace(/!\[([^\]]*)\]\(([^)]+)(?:\s+"([^"]+)")?\)/g, function(match, alt, url, title) {
+                if (title) {
+                    return '<img src="' + url + '" alt="' + escapeHtml(alt) + '" title="' + escapeHtml(title) + '" style="max-width:100%;">';
+                }
+                return '<img src="' + url + '" alt="' + escapeHtml(alt) + '" style="max-width:100%;">';
+            });
+            
+            result = result.replace(/\[([^\]]+)\]\(([^)]+)(?:\s+"([^"]+)")?\)/g, function(match, text, url, title) {
+                if (title) {
+                    return '<a href="' + url + '" target="_blank" title="' + escapeHtml(title) + '">' + text + '</a>';
+                }
+                return '<a href="' + url + '" target="_blank">' + text + '</a>';
+            });
+            
+            result = result.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+            result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            result = result.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
+            result = result.replace(/_(.+?)_/g, '<em>$1</em>');
+            result = result.replace(/~~(.+?)~~/g, '<del>$1</del>');
+            result = result.replace(/`([^`]+)`/g, function(match, code) {
+                return '<code>' + escapeHtml(code) + '</code>';
+            });
+            
+            return result;
+        }
+        
+        const lines = html.split('\n');
+        const result = [];
+        let inBlockquote = false;
+        let blockquoteContent = [];
+        let inList = false;
+        let listType = null;
+        let listContent = [];
+        let inTable = false;
+        let tableContent = [];
+        let inParagraph = false;
+        let paragraphContent = [];
+        
+        function flushBlockquote() {
+            if (inBlockquote && blockquoteContent.length > 0) {
+                let bqHtml = '<blockquote>';
+                const bqLines = blockquoteContent.join('\n').split('\n');
+                let bqPara = [];
+                for (let i = 0; i < bqLines.length; i++) {
+                    const bqLine = bqLines[i];
+                    if (bqLine.trim() === '') {
+                        if (bqPara.length > 0) {
+                            bqHtml += '<p>' + parseInlineElements(bqPara.join(' ')) + '</p>';
+                            bqPara = [];
+                        }
+                    } else {
+                        bqPara.push(bqLine);
+                    }
+                }
+                if (bqPara.length > 0) {
+                    bqHtml += '<p>' + parseInlineElements(bqPara.join(' ')) + '</p>';
+                }
+                bqHtml += '</blockquote>';
+                result.push(bqHtml);
+                blockquoteContent = [];
+                inBlockquote = false;
             }
-            return match;
-        });
+        }
         
-        html = html.replace(/^---$/gim, '<hr>');
+        function flushList() {
+            if (inList && listContent.length > 0) {
+                let listHtml = '';
+                const listTag = listType === 'ol' ? 'ol' : 'ul';
+                listHtml += '<' + listTag + '>';
+                for (let i = 0; i < listContent.length; i++) {
+                    listHtml += '<li>' + parseInlineElements(listContent[i]) + '</li>';
+                }
+                listHtml += '</' + listTag + '>';
+                result.push(listHtml);
+                listContent = [];
+                inList = false;
+                listType = null;
+            }
+        }
         
-        html = html.replace(/\n\n/g, '</p><p>');
-        html = html.replace(/^(?!<[h|o|u|b|p|i|d|t])/gm, '<p>');
-        html = html.replace(/(?<![>])$/gm, '</p>');
+        function flushTable() {
+            if (inTable && tableContent.length >= 2) {
+                let tableHtml = '<table>';
+                const headers = tableContent[0];
+                tableHtml += '<thead><tr>';
+                for (let i = 0; i < headers.length; i++) {
+                    tableHtml += '<th>' + parseInlineElements(headers[i]) + '</th>';
+                }
+                tableHtml += '</tr></thead><tbody>';
+                for (let i = 2; i < tableContent.length; i++) {
+                    const row = tableContent[i];
+                    tableHtml += '<tr>';
+                    for (let j = 0; j < row.length; j++) {
+                        tableHtml += '<td>' + parseInlineElements(row[j]) + '</td>';
+                    }
+                    tableHtml += '</tr>';
+                }
+                tableHtml += '</tbody></table>';
+                result.push(tableHtml);
+                tableContent = [];
+                inTable = false;
+            }
+        }
         
-        return html;
+        function flushParagraph() {
+            if (inParagraph && paragraphContent.length > 0) {
+                result.push('<p>' + parseInlineElements(paragraphContent.join(' ')) + '</p>');
+                paragraphContent = [];
+                inParagraph = false;
+            }
+        }
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            
+            if (trimmed.match(/^CODEBLOCK_\d+$/)) {
+                flushBlockquote();
+                flushList();
+                flushTable();
+                flushParagraph();
+                const idx = parseInt(trimmed.split('_')[1]);
+                const cb = codeBlocks[idx];
+                if (cb) {
+                    const escapedCode = escapeHtml(cb.code.replace(/\n$/, ''));
+                    if (cb.lang) {
+                        result.push('<pre><code class="language-' + cb.lang + '">' + escapedCode + '</code></pre>');
+                    } else {
+                        result.push('<pre><code>' + escapedCode + '</code></pre>');
+                    }
+                }
+                continue;
+            }
+            
+            if (trimmed === '') {
+                if (inBlockquote) {
+                    blockquoteContent.push('');
+                } else {
+                    flushBlockquote();
+                    flushList();
+                    flushTable();
+                    flushParagraph();
+                }
+                continue;
+            }
+            
+            if (trimmed.match(/^===+$/) && i > 0) {
+                flushBlockquote();
+                flushList();
+                flushTable();
+                flushParagraph();
+                const prevLine = lines[i - 1];
+                if (prevLine.trim()) {
+                    result.push('<h1>' + parseInlineElements(prevLine.trim()) + '</h1>');
+                }
+                continue;
+            }
+            
+            if (trimmed.match(/^---+$/) && i > 0) {
+                const prevLine = lines[i - 1];
+                if (prevLine.trim()) {
+                    flushBlockquote();
+                    flushList();
+                    flushTable();
+                    flushParagraph();
+                    result.push('<h2>' + parseInlineElements(prevLine.trim()) + '</h2>');
+                    continue;
+                }
+            }
+            
+            if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+                flushBlockquote();
+                flushList();
+                flushTable();
+                flushParagraph();
+                result.push('<hr>');
+                continue;
+            }
+            
+            const hMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+            if (hMatch) {
+                flushBlockquote();
+                flushList();
+                flushTable();
+                flushParagraph();
+                const level = hMatch[1].length;
+                const text = hMatch[2].trim();
+                result.push('<h' + level + '>' + parseInlineElements(text) + '</h' + level + '>');
+                continue;
+            }
+            
+            if (trimmed.startsWith('>')) {
+                flushList();
+                flushTable();
+                flushParagraph();
+                const bqLine = trimmed.replace(/^>\s?/, '');
+                inBlockquote = true;
+                blockquoteContent.push(bqLine);
+                continue;
+            } else if (inBlockquote) {
+                flushBlockquote();
+            }
+            
+            const olMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
+            if (olMatch) {
+                flushBlockquote();
+                flushTable();
+                flushParagraph();
+                const itemText = olMatch[2].trim();
+                if (!inList || listType !== 'ol') {
+                    flushList();
+                    inList = true;
+                    listType = 'ol';
+                }
+                listContent.push(itemText);
+                continue;
+            }
+            
+            const ulMatch = trimmed.match(/^[-*+]\s+(.+)$/);
+            if (ulMatch) {
+                flushBlockquote();
+                flushTable();
+                flushParagraph();
+                const itemText = ulMatch[1].trim();
+                if (!inList || listType !== 'ul') {
+                    flushList();
+                    inList = true;
+                    listType = 'ul';
+                }
+                listContent.push(itemText);
+                continue;
+            } else if (inList) {
+                flushList();
+            }
+            
+            const tableCellMatch = trimmed.match(/^\|.*\|$/);
+            if (tableCellMatch) {
+                flushBlockquote();
+                flushList();
+                flushParagraph();
+                
+                const cells = trimmed.split('|').filter(function(cell) {
+                    return cell.trim() !== '';
+                }).map(function(cell) {
+                    return cell.trim();
+                });
+                
+                if (inTable) {
+                    const separatorMatch = cells.every(function(cell) {
+                        return cell.match(/^[-:]+$/);
+                    });
+                    if (!separatorMatch) {
+                        tableContent.push(cells);
+                    }
+                } else {
+                    inTable = true;
+                    tableContent.push(cells);
+                }
+                continue;
+            } else if (inTable) {
+                flushTable();
+            }
+            
+            flushBlockquote();
+            flushList();
+            flushTable();
+            inParagraph = true;
+            paragraphContent.push(trimmed);
+        }
+        
+        flushBlockquote();
+        flushList();
+        flushTable();
+        flushParagraph();
+        
+        let finalHtml = result.join('');
+        
+        for (let i = 0; i < codeBlocks.length; i++) {
+            const id = 'CODEBLOCK_' + i;
+            const cb = codeBlocks[i];
+            const escapedCode = escapeHtml(cb.code.replace(/\n$/, ''));
+            let replacement;
+            if (cb.lang) {
+                replacement = '<pre><code class="language-' + cb.lang + '">' + escapedCode + '</code></pre>';
+            } else {
+                replacement = '<pre><code>' + escapedCode + '</code></pre>';
+            }
+            finalHtml = finalHtml.replace(new RegExp(id, 'g'), replacement);
+        }
+        
+        return finalHtml;
     }
 
     function insertMarkdownFormat(format) {
