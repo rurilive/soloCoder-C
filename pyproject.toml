@@ -2,7 +2,7 @@
 name = "document-platform"
 version = "0.1.0"
 description = "文档管理平台，支持上传解析Markdown、doc、excel、ppt文件，自动生成层级文档站"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
@@ -29,7 +29,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
