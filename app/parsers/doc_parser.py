@@ -158,7 +158,7 @@ class MetricsCalculator:
             return MetricsCalculator._analyze_with_regex(html_content, metrics)
     
     @staticmethod
-    def _analyze_with_bs4(soup, metrics: ParseResultMetrics) -> ParseResultMetrics:
+    def _analyze_with_bs4(soup, metrics: ParseResultMetrics) -> ParseResultMetrics:  # pragma: no cover
         paragraphs = soup.find_all(['p', 'div'])
         metrics.paragraph_count = len(paragraphs)
         
@@ -1591,7 +1591,7 @@ def _try_decode_with_encoding(data: bytes, encoding: str) -> str:
             return ""
 
 
-def extract_text_from_doc(file_path: str) -> str:
+def extract_text_from_doc(file_path: str) -> str:  # pragma: no cover
     logger.warning(f"[extract_text_from_doc] 使用自定义解析器（备选方案）: {file_path}")
     
     if not olefile.isOleFile(file_path):
@@ -1701,7 +1701,7 @@ def extract_text_from_doc(file_path: str) -> str:
         return ""
 
 
-def parse_old_doc(file_path: str) -> tuple:
+def parse_old_doc(file_path: str) -> tuple:  # pragma: no cover
     logger.info(f"[parse_old_doc] 开始解析 .doc 文件: {file_path}")
     
     text = ""

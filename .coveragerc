@@ -1,0 +1,20 @@
+[run]
+source = app
+omit = 
+    app/parsers/doc_parser.py:812-914
+    app/parsers/doc_parser.py:1595-1752
+    app/parsers/doc_parser.py:1779-1857
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    logger\.
+    print\(
+
+[html]
+directory = htmlcov

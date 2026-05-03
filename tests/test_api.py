@@ -711,3 +711,147 @@ class TestReparseEndpoint:
         response = client.post("/api/documents/999999/reparse")
         
         assert response.status_code == 404
+
+
+class TestFolderTreeEndpoint:
+    """Tests for folder tree endpoint."""
+
+    def test_get_folders_with_tree_param(self, client: TestClient, db_session: Session):
+        """Test getting folders with tree=true parameter."""
+        parent_folder = Folder(name="Parent Folder")
+        db_session.add(parent_folder)
+        db_session.commit()
+        parent_id = parent_folder.id
+        
+        child_folder = Folder(name="Child Folder", parent_id=parent_id)
+        db_session.add(child_folder)
+        db_session.commit()
+        
+        response = client.get("/api/folders/?tree=true")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "folders" in data
+        assert len(data["folders"]) > 0
+
+    def test_get_folder_tree_endpoint(self, client: TestClient, db_session: Session):
+        """Test the dedicated /tree endpoint."""
+        folder = Folder(name="Test Folder")
+        db_session.add(folder)
+        db_session.commit()
+        
+        response = client.get("/api/folders/tree")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "folders" in data
+
+    def test_get_folder_tree_with_documents(self, client: TestClient, db_session: Session):
+        """Test getting folder tree with documents in folders."""
+        folder = Folder(name="Test Folder")
+        db_session.add(folder)
+        db_session.commit()
+        folder_id = folder.id
+        
+        doc = Document(
+            title="Test Document",
+            filename="test.docx",
+            file_type="doc",
+            file_path="/uploads/test.docx",
+            content="Test content",
+            html_content="<p>Test content</p>",
+            folder_id=folder_id,
+        )
+        db_session.add(doc)
+        db_session.commit()
+        
+        response = client.get(f"/api/folders/{folder_id}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "documents" in data
+        assert len(data["documents"]) > 0
+
+
+class TestUpdateFolderEndpoint:
+    """Tests for folder update endpoint."""
+
+    def test_update_folder(self, client: TestClient, db_session: Session):
+        """Test updating a folder name."""
+        folder = Folder(name="Old Name")
+        db_session.add(folder)
+        db_session.commit()
+        folder_id = folder.id
+        
+        response = client.put(
+            f"/api/folders/{folder_id}",
+            data={"name": "New Name"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        
+        updated_folder = db_session.query(Folder).filter(Folder.id == folder_id).first()
+        assert updated_folder.name == "New Name"
+
+    def test_update_folder_not_found(self, client: TestClient):
+        """Test updating a non-existent folder."""
+        response = client.put(
+            "/api/folders/999999",
+            data={"name": "New Name"}
+        )
+        
+        assert response.status_code == 404
+
+
+class TestCreateFolderWithInvalidParent:
+    """Tests for creating folder with invalid parent."""
+
+    def test_create_folder_with_nonexistent_parent(self, client: TestClient):
+        """Test creating a folder with a parent that doesn't exist."""
+        response = client.post(
+            "/api/folders/",
+            data={"name": "Test Folder", "parent_id": 999999}
+        )
+        
+        assert response.status_code == 404
+
+
+class TestHtmlPages:
+    """Tests for HTML page endpoints."""
+
+    def test_home_page(self, client: TestClient):
+        """Test the home page endpoint."""
+        response = client.get("/")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+
+    def test_document_detail_page(self, client: TestClient):
+        """Test the document detail page."""
+        response = client.get("/document/1")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+
+    def test_folder_detail_page(self, client: TestClient):
+        """Test the folder detail page."""
+        response = client.get("/folder/1")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+
+    def test_search_page(self, client: TestClient):
+        """Test the search page."""
+        response = client.get("/search")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+
+    def test_search_page_with_query(self, client: TestClient):
+        """Test the search page with a query parameter."""
+        response = client.get("/search?q=test")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")

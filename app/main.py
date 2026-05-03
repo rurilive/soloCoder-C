@@ -21,6 +21,23 @@ jinja_env = Environment(
 )
 
 
+def _escapejs(value):
+    """Escape string for use in JavaScript strings."""
+    if value is None:
+        return ""
+    value = str(value)
+    value = value.replace('\\', '\\\\')
+    value = value.replace("'", "\\'")
+    value = value.replace('"', '\\"')
+    value = value.replace('\n', '\\n')
+    value = value.replace('\r', '\\r')
+    value = value.replace('\t', '\\t')
+    return value
+
+
+jinja_env.filters['escapejs'] = _escapejs
+
+
 def render_template(template_name: str, context: dict = None) -> HTMLResponse:
     if context is None:
         context = {}
