@@ -257,6 +257,88 @@ class SheetOperation(BaseModel):
     sheet_name: str
 
 
+@router.get("/{doc_id}/excel/metadata")
+async def get_excel_metadata(
+    doc_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    快速获取Excel文件的元数据（不加载实际数据）
+    适用于大型表格，先获取表格信息再决定如何加载
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        metadata = get_sheet_metadata(str(file_path))
+        return metadata
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取Excel元数据失败: {str(e)}")
+
+
+@router.get("/{doc_id}/excel/data/paginated")
+async def get_excel_data_paginated(
+    doc_id: int,
+    sheet_name: str,
+    start_row: int = 1,
+    end_row: int = 100,
+    include_styles: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    分页获取Excel工作表数据
+    适用于大型表格，每次只加载指定范围的行
+    
+    Args:
+        doc_id: 文档ID
+        sheet_name: 工作表名称
+        start_row: 起始行（从1开始）
+        end_row: 结束行
+        include_styles: 是否包含样式信息（会降低性能）
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "excel":
+        raise HTTPException(status_code=400, detail="此文档不是Excel格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    if start_row < 1:
+        start_row = 1
+    if end_row < start_row:
+        end_row = start_row + 99
+    
+    max_rows_per_request = 500
+    if end_row - start_row + 1 > max_rows_per_request:
+        end_row = start_row + max_rows_per_request - 1
+    
+    try:
+        data = get_sheet_data_paginated(
+            str(file_path),
+            sheet_name,
+            start_row,
+            end_row,
+            include_styles
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取Excel数据失败: {str(e)}")
+
+
 @router.get("/{doc_id}/excel/data")
 async def get_excel_data(
     doc_id: int,
@@ -266,6 +348,8 @@ async def get_excel_data(
     """
     获取Excel文件的详细数据（JSON格式）
     仅适用于Excel类型的文档
+    
+    注意：对于超过1000行的大型表格，建议使用 /data/paginated 进行分页加载
     """
     doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
     

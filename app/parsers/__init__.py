@@ -8,6 +8,8 @@ from app.parsers.excel_parser import (
     add_new_sheet,
     delete_sheet,
     get_sheet_data_as_json,
+    get_sheet_metadata,
+    get_sheet_data_paginated,
 )
 from app.parsers.ppt_parser import parse_ppt
 
@@ -22,4 +24,6 @@ __all__ = [
     "add_new_sheet",
     "delete_sheet",
     "get_sheet_data_as_json",
+    "get_sheet_metadata",
+    "get_sheet_data_paginated",
 ]

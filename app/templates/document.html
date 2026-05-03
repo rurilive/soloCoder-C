@@ -30,8 +30,18 @@
     let currentDocId = {{ doc_id }};
     let currentDocument = null;
     let excelData = null;
+    let excelMetadata = null;
     let currentSheetIndex = 0;
     let isExcelEditMode = false;
+    
+    let paginationState = {
+        currentPage: 1,
+        rowsPerPage: 100,
+        totalRows: 0,
+        totalPages: 0,
+        currentSheetName: null,
+        isLoading: false,
+    };
 
     async function loadDocument() {
         try {
@@ -115,13 +125,112 @@
 
     async function loadExcelData() {
         try {
-            const response = await fetch(`/api/documents/${currentDocId}/excel/data`);
-            if (response.ok) {
-                excelData = await response.json();
-                currentSheetIndex = 0;
+            const metadataResponse = await fetch(`/api/documents/${currentDocId}/excel/metadata`);
+            if (metadataResponse.ok) {
+                excelMetadata = await metadataResponse.json();
+                
+                if (excelMetadata.success && excelMetadata.sheets && excelMetadata.sheets.length > 0) {
+                    const MAX_ROWS_FULL_LOAD = 1000;
+                    const largestSheet = excelMetadata.sheets.reduce((max, sheet) => 
+                        sheet.max_row > max.max_row ? sheet : max
+                    );
+                    
+                    if (largestSheet.max_row <= MAX_ROWS_FULL_LOAD) {
+                        const dataResponse = await fetch(`/api/documents/${currentDocId}/excel/data`);
+                        if (dataResponse.ok) {
+                            excelData = await dataResponse.json();
+                            currentSheetIndex = 0;
+                        }
+                    } else {
+                        excelData = {
+                            success: true,
+                            sheets: excelMetadata.sheets.map(sheet => ({
+                                name: sheet.name,
+                                max_row: sheet.max_row,
+                                max_col: sheet.max_col,
+                                data: [],
+                                is_paginated: true,
+                                message: `表格较大（${sheet.max_row}行），使用分页加载`,
+                            })),
+                            sheet_count: excelMetadata.sheets.length,
+                            is_large_file: true,
+                        };
+                        currentSheetIndex = 0;
+                        
+                        if (excelMetadata.sheets.length > 0) {
+                            const firstSheet = excelMetadata.sheets[0];
+                            await loadPaginatedSheetData(firstSheet.name, 1);
+                        }
+                    }
+                }
             }
         } catch (error) {
             console.error('加载Excel数据失败:', error);
+        }
+    }
+
+    async function loadPaginatedSheetData(sheetName, page) {
+        if (paginationState.isLoading) return;
+        
+        paginationState.isLoading = true;
+        showLoadingIndicator();
+        
+        try {
+            const startRow = (page - 1) * paginationState.rowsPerPage + 1;
+            const endRow = page * paginationState.rowsPerPage;
+            
+            const response = await fetch(
+                `/api/documents/${currentDocId}/excel/data/paginated?sheet_name=${encodeURIComponent(sheetName)}&start_row=${startRow}&end_row=${endRow}&include_styles=false`
+            );
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success) {
+                    paginationState.currentPage = page;
+                    paginationState.currentSheetName = sheetName;
+                    paginationState.totalRows = data.total_rows;
+                    paginationState.totalPages = Math.ceil(data.total_rows / paginationState.rowsPerPage);
+                    
+                    if (excelData && excelData.sheets) {
+                        const sheetIndex = excelData.sheets.findIndex(s => s.name === sheetName);
+                        if (sheetIndex !== -1) {
+                            excelData.sheets[sheetIndex].data = data.data;
+                            excelData.sheets[sheetIndex].merged_cells = data.merged_cells || [];
+                            excelData.sheets[sheetIndex]._paginatedData = true;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('分页加载数据失败:', error);
+            showToast('加载数据失败', 'error');
+        } finally {
+            paginationState.isLoading = false;
+            hideLoadingIndicator();
+            renderExcelContent();
+        }
+    }
+
+    function showLoadingIndicator() {
+        let indicator = document.getElementById('excel-loading-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'excel-loading-indicator';
+            indicator.className = 'excel-loading-indicator';
+            indicator.innerHTML = `
+                <div class="loading-spinner"></div>
+                <span>加载中...</span>
+            `;
+            document.body.appendChild(indicator);
+        }
+        indicator.style.display = 'flex';
+    }
+
+    function hideLoadingIndicator() {
+        const indicator = document.getElementById('excel-loading-indicator');
+        if (indicator) {
+            indicator.style.display = 'none';
         }
     }
 
@@ -143,15 +252,164 @@
             html += '<div class="sheet-tabs">';
             excelData.sheets.forEach((sheet, index) => {
                 const activeClass = index === currentSheetIndex ? 'active' : '';
-                html += `<button class="sheet-tab ${activeClass}" onclick="switchSheet(${index})">${escapeHtml(sheet.name)}</button>`;
+                const rowCount = sheet.max_row || 0;
+                html += `<button class="sheet-tab ${activeClass}" onclick="switchSheet(${index})">
+                    ${escapeHtml(sheet.name)}
+                    <span class="sheet-row-count">${rowCount.toLocaleString()}行</span>
+                </button>`;
             });
             html += '</div>';
         }
         
         const currentSheet = excelData.sheets[currentSheetIndex];
+        
+        const isPaginated = currentSheet.is_paginated || excelData.is_large_file;
+        if (isPaginated) {
+            html += renderPaginationInfo(currentSheet);
+        }
+        
         html += renderSheetTable(currentSheet);
         
+        if (isPaginated && paginationState.totalPages > 1) {
+            html += renderPaginationControls();
+        }
+        
         contentDiv.innerHTML = html;
+    }
+
+    function renderPaginationInfo(sheet) {
+        const totalRows = paginationState.totalRows || sheet.max_row || 0;
+        const currentPage = paginationState.currentPage;
+        const rowsPerPage = paginationState.rowsPerPage;
+        const totalPages = paginationState.totalPages || Math.ceil(totalRows / rowsPerPage);
+        
+        const startRow = (currentPage - 1) * rowsPerPage + 1;
+        const endRow = Math.min(currentPage * rowsPerPage, totalRows);
+        
+        return `
+            <div class="pagination-info">
+                <div class="pagination-stats">
+                    <span class="stat-item">
+                        <strong>总行数:</strong> ${totalRows.toLocaleString()}
+                    </span>
+                    <span class="stat-item">
+                        <strong>当前页:</strong> ${currentPage} / ${totalPages}
+                    </span>
+                    <span class="stat-item">
+                        <strong>显示行:</strong> ${startRow.toLocaleString()} - ${endRow.toLocaleString()}
+                    </span>
+                </div>
+                <div class="pagination-settings">
+                    <label>每页显示:</label>
+                    <select id="rows-per-page-select" onchange="changeRowsPerPage(this.value)">
+                        <option value="50" ${rowsPerPage === 50 ? 'selected' : ''}>50行</option>
+                        <option value="100" ${rowsPerPage === 100 ? 'selected' : ''}>100行</option>
+                        <option value="200" ${rowsPerPage === 200 ? 'selected' : ''}>200行</option>
+                        <option value="500" ${rowsPerPage === 500 ? 'selected' : ''}>500行</option>
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPaginationControls() {
+        const currentPage = paginationState.currentPage;
+        const totalPages = paginationState.totalPages;
+        const sheetName = excelData.sheets[currentSheetIndex].name;
+        
+        let pages = [];
+        const maxVisiblePages = 5;
+        
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            pages.push(i);
+        }
+        
+        let html = '<div class="pagination-controls">';
+        
+        html += `<button class="page-btn ${currentPage === 1 ? 'disabled' : ''}" 
+            onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>
+            ⏮️ 首页
+        </button>`;
+        
+        html += `<button class="page-btn ${currentPage === 1 ? 'disabled' : ''}" 
+            onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+            ◀ 上一页
+        </button>`;
+        
+        if (startPage > 1) {
+            html += '<span class="page-ellipsis">...</span>';
+        }
+        
+        pages.forEach(page => {
+            const activeClass = page === currentPage ? 'active' : '';
+            html += `<button class="page-btn ${activeClass}" onclick="goToPage(${page})">${page}</button>`;
+        });
+        
+        if (endPage < totalPages) {
+            html += '<span class="page-ellipsis">...</span>';
+        }
+        
+        html += `<button class="page-btn ${currentPage === totalPages ? 'disabled' : ''}" 
+            onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+            下一页 ▶
+        </button>`;
+        
+        html += `<button class="page-btn ${currentPage === totalPages ? 'disabled' : ''}" 
+            onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>
+            末页 ⏭️
+        </button>`;
+        
+        html += `<div class="page-jump">
+            <label>跳转到:</label>
+            <input type="number" id="jump-page-input" min="1" max="${totalPages}" value="${currentPage}" 
+                onkeydown="handleJumpPage(event, ${totalPages})">
+            <button class="btn btn-small" onclick="handleJumpPageClick(${totalPages})">确定</button>
+        </div>`;
+        
+        html += '</div>';
+        
+        return html;
+    }
+
+    function goToPage(page) {
+        const sheetName = excelData.sheets[currentSheetIndex].name;
+        loadPaginatedSheetData(sheetName, page);
+    }
+
+    function changeRowsPerPage(value) {
+        paginationState.rowsPerPage = parseInt(value);
+        paginationState.currentPage = 1;
+        const sheetName = excelData.sheets[currentSheetIndex].name;
+        loadPaginatedSheetData(sheetName, 1);
+    }
+
+    function handleJumpPage(event, totalPages) {
+        if (event.key === 'Enter') {
+            const input = document.getElementById('jump-page-input');
+            const page = parseInt(input.value);
+            if (page >= 1 && page <= totalPages) {
+                goToPage(page);
+            } else {
+                showToast('请输入有效的页码', 'error');
+            }
+        }
+    }
+
+    function handleJumpPageClick(totalPages) {
+        const input = document.getElementById('jump-page-input');
+        const page = parseInt(input.value);
+        if (page >= 1 && page <= totalPages) {
+            goToPage(page);
+        } else {
+            showToast('请输入有效的页码', 'error');
+        }
     }
 
     function renderSheetTable(sheet) {
@@ -222,9 +480,18 @@
         return typeMap[dataType] || '';
     }
 
-    function switchSheet(index) {
+    async function switchSheet(index) {
         currentSheetIndex = index;
-        renderExcelContent();
+        
+        const targetSheet = excelData.sheets[index];
+        const isPaginated = targetSheet.is_paginated || excelData.is_large_file;
+        
+        if (isPaginated) {
+            paginationState.currentPage = 1;
+            await loadPaginatedSheetData(targetSheet.name, 1);
+        } else {
+            renderExcelContent();
+        }
     }
 
     function toggleExcelEditMode() {

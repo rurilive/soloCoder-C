@@ -555,9 +555,202 @@ def delete_sheet(file_path: str, sheet_name: str) -> bool:
         return False
 
 
+def get_sheet_metadata(file_path: str) -> Dict[str, Any]:
+    """
+    快速获取Excel文件的元数据（不加载实际数据）
+    
+    Args:
+        file_path: Excel文件路径
+    
+    Returns:
+        包含元数据的字典
+    """
+    try:
+        wb = load_workbook(file_path, read_only=True, data_only=False)
+        
+        sheets_info = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            sheets_info.append({
+                'name': sheet_name,
+                'max_row': ws.max_row if ws.max_row else 0,
+                'max_col': ws.max_column if ws.max_column else 0,
+            })
+        
+        wb.close()
+        
+        return {
+            'success': True,
+            'sheets': sheets_info,
+            'sheet_count': len(sheets_info),
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def get_sheet_data_paginated(
+    file_path: str,
+    sheet_name: str,
+    start_row: int = 1,
+    end_row: int = 100,
+    include_styles: bool = False
+) -> Dict[str, Any]:
+    """
+    分页获取Excel工作表数据
+    
+    性能优化说明：
+    - 使用普通模式（非read_only）加载工作簿，支持快速随机访问
+    - read_only模式对于分页场景性能很差，因为需要顺序扫描所有行
+    
+    Args:
+        file_path: Excel文件路径
+        sheet_name: 工作表名称
+        start_row: 起始行（从1开始）
+        end_row: 结束行
+        include_styles: 是否包含样式信息（会降低性能）
+    
+    Returns:
+        包含分页数据的字典
+    """
+    try:
+        wb = load_workbook(file_path, read_only=False, data_only=False)
+        
+        if sheet_name not in wb.sheetnames:
+            wb.close()
+            return {'success': False, 'error': f'工作表 "{sheet_name}" 不存在'}
+        
+        ws = wb[sheet_name]
+        
+        total_rows = ws.max_row if ws.max_row else 0
+        total_cols = ws.max_column if ws.max_column else 0
+        
+        start_row = max(1, start_row)
+        end_row = min(end_row, total_rows)
+        
+        if start_row > end_row:
+            wb.close()
+            return {
+                'success': True,
+                'sheet_name': sheet_name,
+                'total_rows': total_rows,
+                'total_cols': total_cols,
+                'start_row': start_row,
+                'end_row': end_row,
+                'data': [],
+                'row_count': 0,
+            }
+        
+        merged_cells_info = []
+        merged_cell_ranges = {}
+        
+        if hasattr(ws, 'merged_cells') and ws.merged_cells:
+            for merged_range in ws.merged_cells.ranges:
+                min_col, min_row, max_col, max_row = merged_range.bounds
+                merged_info = {
+                    'min_row': min_row,
+                    'min_col': min_col,
+                    'max_row': max_row,
+                    'max_col': max_col,
+                    'range_string': str(merged_range),
+                }
+                merged_cells_info.append(merged_info)
+                
+                for r in range(min_row, max_row + 1):
+                    for c in range(min_col, max_col + 1):
+                        merged_cell_ranges[(r, c)] = {
+                            'is_master': (r == min_row and c == min_col),
+                            'min_row': min_row,
+                            'min_col': min_col,
+                            'max_row': max_row,
+                            'max_col': max_col,
+                        }
+        
+        data = []
+        actual_start = max(1, start_row)
+        actual_end = min(end_row, total_rows)
+        
+        for row_idx in range(actual_start, actual_end + 1):
+            row_data = []
+            
+            for col_idx in range(1, total_cols + 1):
+                try:
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                except:
+                    row_data.append({
+                        'row': row_idx,
+                        'col': col_idx,
+                        'value': None,
+                        'data_type': 'empty',
+                    })
+                    continue
+                
+                cell_value = cell.value
+                data_type = get_data_type(cell)
+                
+                is_merged = False
+                merge_master = False
+                merge_range = None
+                
+                if (row_idx, col_idx) in merged_cell_ranges:
+                    merge_info = merged_cell_ranges[(row_idx, col_idx)]
+                    is_merged = True
+                    merge_master = merge_info['is_master']
+                    merge_range = (
+                        merge_info['min_row'],
+                        merge_info['min_col'],
+                        merge_info['max_row'],
+                        merge_info['max_col'],
+                    )
+                
+                cell_dict = {
+                    'row': row_idx,
+                    'col': col_idx,
+                    'value': cell_value,
+                    'data_type': data_type,
+                    'is_merged': is_merged,
+                    'merge_master': merge_master,
+                }
+                
+                if merge_range:
+                    cell_dict['merge_range'] = merge_range
+                
+                if include_styles:
+                    style = extract_cell_style(cell)
+                    cell_dict['style'] = {
+                        'font': style.font,
+                        'fill': style.fill,
+                        'alignment': style.alignment,
+                    }
+                
+                row_data.append(cell_dict)
+            
+            data.append(row_data)
+        
+        wb.close()
+        
+        return {
+            'success': True,
+            'sheet_name': sheet_name,
+            'total_rows': total_rows,
+            'total_cols': total_cols,
+            'start_row': actual_start,
+            'end_row': actual_end,
+            'data': data,
+            'row_count': len(data),
+            'merged_cells': merged_cells_info,
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+
 def get_sheet_data_as_json(file_path: str, sheet_name: Optional[str] = None) -> Dict[str, Any]:
     """
     获取Excel文件数据为JSON格式
+    
+    注意：对于大型表格，建议使用 get_sheet_data_paginated 进行分页加载
     
     Args:
         file_path: Excel文件路径
@@ -566,45 +759,62 @@ def get_sheet_data_as_json(file_path: str, sheet_name: Optional[str] = None) -> 
     Returns:
         包含数据的字典
     """
-    result = parse_excel_file(file_path)
+    metadata = get_sheet_metadata(file_path)
     
-    if not result.success:
-        return {'success': False, 'error': result.error_message}
+    if not metadata['success']:
+        return {'success': False, 'error': metadata['error']}
     
     sheets_data = []
+    MAX_ROWS_FULL_LOAD = 1000
     
-    for sheet in result.sheets:
-        if sheet_name and sheet.name != sheet_name:
+    for sheet_info in metadata['sheets']:
+        if sheet_name and sheet_info['name'] != sheet_name:
             continue
         
-        sheet_dict = {
-            'name': sheet.name,
-            'max_row': sheet.max_row,
-            'max_col': sheet.max_col,
-            'merged_cells': sheet.merged_cells,
-            'data': []
-        }
+        total_rows = sheet_info['max_row']
         
-        for row in sheet.rows:
-            row_data = []
-            for cell in row:
-                cell_dict = {
-                    'row': cell.row,
-                    'col': cell.col,
-                    'value': cell.value,
-                    'data_type': cell.data_type,
-                    'is_merged': cell.is_merged,
-                    'merge_master': cell.merge_master,
-                }
-                if cell.merge_range:
-                    cell_dict['merge_range'] = cell.merge_range
-                row_data.append(cell_dict)
-            sheet_dict['data'].append(row_data)
-        
-        sheets_data.append(sheet_dict)
+        if total_rows <= MAX_ROWS_FULL_LOAD:
+            paginated_data = get_sheet_data_paginated(
+                file_path,
+                sheet_info['name'],
+                start_row=1,
+                end_row=total_rows,
+                include_styles=False
+            )
+            
+            if paginated_data['success']:
+                sheets_data.append({
+                    'name': sheet_info['name'],
+                    'max_row': sheet_info['max_row'],
+                    'max_col': sheet_info['max_col'],
+                    'merged_cells': paginated_data.get('merged_cells', []),
+                    'data': paginated_data['data'],
+                    'is_paginated': False,
+                })
+            else:
+                sheets_data.append({
+                    'name': sheet_info['name'],
+                    'max_row': sheet_info['max_row'],
+                    'max_col': sheet_info['max_col'],
+                    'merged_cells': [],
+                    'data': [],
+                    'is_paginated': False,
+                    'error': paginated_data.get('error'),
+                })
+        else:
+            sheets_data.append({
+                'name': sheet_info['name'],
+                'max_row': sheet_info['max_row'],
+                'max_col': sheet_info['max_col'],
+                'merged_cells': [],
+                'data': [],
+                'is_paginated': True,
+                'message': f'表格较大（{total_rows}行），请使用分页API加载数据',
+            })
     
     return {
         'success': True,
         'sheets': sheets_data,
         'sheet_count': len(sheets_data),
+        'is_large_file': any(s.get('is_paginated', False) for s in sheets_data),
     }
