@@ -340,6 +340,7 @@
         let listContent = [];
         let inTable = false;
         let tableContent = [];
+        let tableHasSeparator = false;
         let inParagraph = false;
         let paragraphContent = [];
         
@@ -386,7 +387,7 @@
         }
         
         function flushTable() {
-            if (inTable && tableContent.length >= 2) {
+            if (inTable && tableHasSeparator && tableContent.length >= 1) {
                 let tableHtml = '<table>';
                 const headers = tableContent[0];
                 tableHtml += '<thead><tr>';
@@ -394,7 +395,7 @@
                     tableHtml += '<th>' + parseInlineElements(headers[i]) + '</th>';
                 }
                 tableHtml += '</tr></thead><tbody>';
-                for (let i = 2; i < tableContent.length; i++) {
+                for (let i = 1; i < tableContent.length; i++) {
                     const row = tableContent[i];
                     tableHtml += '<tr>';
                     for (let j = 0; j < row.length; j++) {
@@ -406,6 +407,11 @@
                 result.push(tableHtml);
                 tableContent = [];
                 inTable = false;
+                tableHasSeparator = false;
+            } else if (inTable) {
+                tableContent = [];
+                inTable = false;
+                tableHasSeparator = false;
             }
         }
         
@@ -556,12 +562,15 @@
                     const separatorMatch = cells.every(function(cell) {
                         return cell.match(/^[-:]+$/);
                     });
-                    if (!separatorMatch) {
+                    if (separatorMatch) {
+                        tableHasSeparator = true;
+                    } else {
                         tableContent.push(cells);
                     }
                 } else {
                     inTable = true;
                     tableContent.push(cells);
+                    tableHasSeparator = false;
                 }
                 continue;
             } else if (inTable) {
