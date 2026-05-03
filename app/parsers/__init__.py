@@ -22,6 +22,12 @@ from app.parsers.ppt_parser import (
     add_new_slide,
     delete_slide,
     reorder_slides,
+    get_background_info,
+    set_solid_background,
+    set_picture_background,
+    set_picture_background_v2,
+    add_picture_shape_to_slide,
+    remove_background,
 )
 
 __all__ = [
@@ -38,6 +44,12 @@ __all__ = [
     "add_new_slide",
     "delete_slide",
     "reorder_slides",
+    "get_background_info",
+    "set_solid_background",
+    "set_picture_background",
+    "set_picture_background_v2",
+    "add_picture_shape_to_slide",
+    "remove_background",
     "parse_excel_file",
     "update_cell_in_excel",
     "update_multiple_cells",

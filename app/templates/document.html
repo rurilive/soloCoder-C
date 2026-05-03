@@ -814,6 +814,8 @@
             html += `
                 <div class="excel-edit-actions">
                     <button class="btn btn-primary" onclick="showAddSlideModal()">➕ 添加幻灯片</button>
+                    <button class="btn btn-secondary" onclick="showBackgroundSettingsModal()">🎨 背景设置</button>
+                    <button class="btn btn-secondary" onclick="showAddPictureModal()">🖼️ 添加图片</button>
                     <button class="btn btn-danger" onclick="confirmDeletePptSlide()">🗑️ 删除当前幻灯片</button>
                     <button class="btn btn-secondary" onclick="showReorderSlideModal()">🔄 重排幻灯片</button>
                     <button class="btn btn-secondary" onclick="togglePptEditMode()">✓ 退出编辑模式</button>
@@ -1302,6 +1304,392 @@
             } else {
                 const error = await response.json();
                 showToast(error.detail || '移动失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    function showBackgroundSettingsModal() {
+        if (!pptData || !pptData.slides || pptData.slides.length === 0) {
+            showToast('请先选择幻灯片', 'error');
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        
+        const modalHtml = `
+            <div id="background-settings-modal-overlay" class="modal-overlay" onclick="closeBackgroundSettingsModal(event)">
+                <div class="modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3>背景设置 - 幻灯片 ${currentSlide.slide_idx}</h3>
+                        <button class="modal-close" onclick="closeBackgroundSettingsModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>背景类型</label>
+                            <div class="background-type-selector">
+                                <label class="background-type-option">
+                                    <input type="radio" name="background-type" value="none" checked>
+                                    <span>无背景</span>
+                                </label>
+                                <label class="background-type-option">
+                                    <input type="radio" name="background-type" value="solid">
+                                    <span>纯色背景</span>
+                                </label>
+                                <label class="background-type-option">
+                                    <input type="radio" name="background-type" value="picture">
+                                    <span>图片背景</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div id="solid-color-section" class="background-section" style="display: none;">
+                            <div class="form-group">
+                                <label for="background-color">选择颜色</label>
+                                <div class="color-picker-container">
+                                    <input type="color" id="background-color" value="#ffffff">
+                                    <input type="text" id="background-color-hex" value="#ffffff" class="form-input" style="width: 120px; margin-left: 10px;">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>常用颜色</label>
+                                <div class="color-preset-container">
+                                    <button type="button" class="color-preset" style="background: #ffffff;" onclick="setBackgroundColor('#ffffff')"></button>
+                                    <button type="button" class="color-preset" style="background: #f8f9fa;" onclick="setBackgroundColor('#f8f9fa')"></button>
+                                    <button type="button" class="color-preset" style="background: #e9ecef;" onclick="setBackgroundColor('#e9ecef')"></button>
+                                    <button type="button" class="color-preset" style="background: #667eea;" onclick="setBackgroundColor('#667eea')"></button>
+                                    <button type="button" class="color-preset" style="background: #764ba2;" onclick="setBackgroundColor('#764ba2')"></button>
+                                    <button type="button" class="color-preset" style="background: #28a745;" onclick="setBackgroundColor('#28a745')"></button>
+                                    <button type="button" class="color-preset" style="background: #dc3545;" onclick="setBackgroundColor('#dc3545')"></button>
+                                    <button type="button" class="color-preset" style="background: #ffc107;" onclick="setBackgroundColor('#ffc107')"></button>
+                                    <button type="button" class="color-preset" style="background: #17a2b8;" onclick="setBackgroundColor('#17a2b8')"></button>
+                                    <button type="button" class="color-preset" style="background: #343a40;" onclick="setBackgroundColor('#343a40')"></button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="applySolidBackground()">应用纯色背景</button>
+                        </div>
+                        
+                        <div id="picture-background-section" class="background-section" style="display: none;">
+                            <div class="form-group">
+                                <label for="background-image">选择图片</label>
+                                <input type="file" id="background-image" accept="image/*" class="form-input">
+                                <small class="form-hint">支持 JPG、PNG、GIF、WebP 格式</small>
+                            </div>
+                            <div id="background-image-preview" class="image-preview" style="display: none;">
+                                <img id="background-preview-img" style="max-width: 100%; max-height: 200px;">
+                            </div>
+                            <button type="button" class="btn btn-primary" id="apply-picture-btn" onclick="applyPictureBackground()" disabled>应用图片背景</button>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                            <button type="button" class="btn btn-danger" onclick="removeSlideBackground()">移除当前背景</button>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeBackgroundSettingsModal()">关闭</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        const radios = document.querySelectorAll('input[name="background-type"]');
+        radios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.getElementById('solid-color-section').style.display = this.value === 'solid' ? 'block' : 'none';
+                document.getElementById('picture-background-section').style.display = this.value === 'picture' ? 'block' : 'none';
+            });
+        });
+        
+        const colorInput = document.getElementById('background-color');
+        const hexInput = document.getElementById('background-color-hex');
+        
+        colorInput.addEventListener('input', function() {
+            hexInput.value = this.value;
+        });
+        
+        hexInput.addEventListener('input', function() {
+            let value = this.value;
+            if (!value.startsWith('#')) {
+                value = '#' + value;
+            }
+            if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+                colorInput.value = value;
+            }
+        });
+        
+        const imageInput = document.getElementById('background-image');
+        const imagePreview = document.getElementById('background-image-preview');
+        const previewImg = document.getElementById('background-preview-img');
+        const applyPictureBtn = document.getElementById('apply-picture-btn');
+        
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    previewImg.src = event.target.result;
+                    imagePreview.style.display = 'block';
+                    applyPictureBtn.disabled = false;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    function setBackgroundColor(color) {
+        document.getElementById('background-color').value = color;
+        document.getElementById('background-color-hex').value = color;
+    }
+
+    function closeBackgroundSettingsModal(event) {
+        if (!event || event.target === event.currentTarget) {
+            const overlay = document.getElementById('background-settings-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+    }
+
+    async function applySolidBackground() {
+        const colorInput = document.getElementById('background-color');
+        const color = colorInput.value;
+        
+        if (!color) {
+            showToast('请选择颜色', 'error');
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/background/solid`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    slide_idx: currentSlide.slide_idx,
+                    color: color
+                })
+            });
+            
+            if (response.ok) {
+                showToast('纯色背景设置成功', 'success');
+                closeBackgroundSettingsModal();
+                await loadPptData();
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '设置失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    async function applyPictureBackground() {
+        const imageInput = document.getElementById('background-image');
+        const file = imageInput.files[0];
+        
+        if (!file) {
+            showToast('请选择图片文件', 'error');
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        
+        const formData = new FormData();
+        formData.append('slide_idx', currentSlide.slide_idx);
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/background/picture`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                showToast('图片背景设置成功', 'success');
+                closeBackgroundSettingsModal();
+                await loadPptData();
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '设置失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    async function removeSlideBackground() {
+        if (!confirm('确定要移除当前幻灯片的背景吗？')) {
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/background`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    slide_idx: currentSlide.slide_idx
+                })
+            });
+            
+            if (response.ok) {
+                showToast('背景移除成功', 'success');
+                closeBackgroundSettingsModal();
+                await loadPptData();
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '移除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    function showAddPictureModal() {
+        if (!pptData || !pptData.slides || pptData.slides.length === 0) {
+            showToast('请先选择幻灯片', 'error');
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        
+        const modalHtml = `
+            <div id="add-picture-modal-overlay" class="modal-overlay" onclick="closeAddPictureModal(event)">
+                <div class="modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3>添加图片 - 幻灯片 ${currentSlide.slide_idx}</h3>
+                        <button class="modal-close" onclick="closeAddPictureModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="picture-file">选择图片文件</label>
+                            <input type="file" id="picture-file" accept="image/*" class="form-input">
+                            <small class="form-hint">支持 JPG、PNG、GIF、WebP 格式</small>
+                        </div>
+                        
+                        <div id="picture-preview" class="image-preview" style="display: none;">
+                            <img id="picture-preview-img" style="max-width: 100%; max-height: 200px;">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>位置设置 (可选，单位：磅)</label>
+                            <div class="form-row" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div class="form-group" style="flex: 1; min-width: 120px;">
+                                    <label for="picture-left">左边距</label>
+                                    <input type="number" id="picture-left" value="0" class="form-input" min="0">
+                                </div>
+                                <div class="form-group" style="flex: 1; min-width: 120px;">
+                                    <label for="picture-top">上边距</label>
+                                    <input type="number" id="picture-top" value="0" class="form-input" min="0">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>尺寸设置 (可选，单位：磅，留空则使用原始尺寸)</label>
+                            <div class="form-row" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div class="form-group" style="flex: 1; min-width: 120px;">
+                                    <label for="picture-width">宽度</label>
+                                    <input type="number" id="picture-width" class="form-input" min="1" placeholder="留空自动">
+                                </div>
+                                <div class="form-group" style="flex: 1; min-width: 120px;">
+                                    <label for="picture-height">高度</label>
+                                    <input type="number" id="picture-height" class="form-input" min="1" placeholder="留空自动">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeAddPictureModal()">取消</button>
+                        <button type="button" class="btn btn-primary" id="add-picture-btn" onclick="submitAddPictureForm()" disabled>添加图片</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        const imageInput = document.getElementById('picture-file');
+        const imagePreview = document.getElementById('picture-preview');
+        const previewImg = document.getElementById('picture-preview-img');
+        const addPictureBtn = document.getElementById('add-picture-btn');
+        
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    previewImg.src = event.target.result;
+                    imagePreview.style.display = 'block';
+                    addPictureBtn.disabled = false;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    function closeAddPictureModal(event) {
+        if (!event || event.target === event.currentTarget) {
+            const overlay = document.getElementById('add-picture-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+    }
+
+    async function submitAddPictureForm() {
+        const imageInput = document.getElementById('picture-file');
+        const file = imageInput.files[0];
+        
+        if (!file) {
+            showToast('请选择图片文件', 'error');
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        const left = parseFloat(document.getElementById('picture-left').value) || 0;
+        const top = parseFloat(document.getElementById('picture-top').value) || 0;
+        const widthInput = document.getElementById('picture-width').value;
+        const heightInput = document.getElementById('picture-height').value;
+        
+        const formData = new FormData();
+        formData.append('slide_idx', currentSlide.slide_idx);
+        formData.append('left', left);
+        formData.append('top', top);
+        if (widthInput) {
+            formData.append('width', parseFloat(widthInput));
+        }
+        if (heightInput) {
+            formData.append('height', parseFloat(heightInput));
+        }
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/picture`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                showToast('图片添加成功', 'success');
+                closeAddPictureModal();
+                await loadPptData();
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '添加失败', 'error');
             }
         } catch (error) {
             showToast('网络错误', 'error');

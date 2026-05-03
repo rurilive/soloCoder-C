@@ -1118,3 +1118,339 @@ def reorder_slides(
         import traceback
         traceback.print_exc()
         return False
+
+
+BACKGROUND_DIR = Path(__file__).resolve().parent.parent.parent / 'uploads' / 'backgrounds'
+BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@dataclass
+class BackgroundInfo:
+    background_type: str = "none"
+    color: Optional[str] = None
+    image_path: Optional[str] = None
+    image_filename: Optional[str] = None
+
+
+def get_background_info(file_path: str, slide_idx: int) -> BackgroundInfo:
+    """
+    获取幻灯片的背景信息
+    
+    Args:
+        file_path: PPT文件路径
+        slide_idx: 幻灯片索引（从1开始）
+    
+    Returns:
+        BackgroundInfo 对象
+    """
+    logger.info(f"[get_background_info] 获取背景信息: {file_path}, 幻灯片: {slide_idx}")
+    
+    try:
+        prs = Presentation(file_path)
+        
+        if slide_idx < 1 or slide_idx > len(prs.slides):
+            logger.error(f"[get_background_info] 幻灯片索引超出范围: {slide_idx}")
+            return BackgroundInfo(background_type="none")
+        
+        slide = prs.slides[slide_idx - 1]
+        
+        background = BackgroundInfo(background_type="none")
+        
+        try:
+            if hasattr(slide, 'background') and hasattr(slide.background, 'fill'):
+                fill = slide.background.fill
+                
+                if fill.type is not None:
+                    fill_type_name = str(fill.type)
+                    
+                    if 'SOLID' in fill_type_name:
+                        background.background_type = "solid"
+                        if hasattr(fill, 'fore_color') and hasattr(fill.fore_color, 'rgb'):
+                            if fill.fore_color.rgb:
+                                background.color = str(fill.fore_color.rgb)
+                    
+                    elif 'PICTURE' in fill_type_name:
+                        background.background_type = "picture"
+                        
+        except Exception as e:
+            logger.warning(f"[get_background_info] 读取背景信息时出错: {e}")
+        
+        return background
+        
+    except Exception as e:
+        logger.error(f"[get_background_info] 获取背景信息失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return BackgroundInfo(background_type="none")
+
+
+def set_solid_background(file_path: str, slide_idx: int, color: str) -> bool:
+    """
+    设置幻灯片纯色背景
+    
+    Args:
+        file_path: PPT文件路径
+        slide_idx: 幻灯片索引（从1开始）
+        color: 颜色值，如 "FF0000" 或 "#FF0000"
+    
+    Returns:
+        是否成功
+    """
+    logger.info(f"[set_solid_background] 设置纯色背景: {file_path}, 幻灯片: {slide_idx}, 颜色: {color}")
+    
+    try:
+        prs = Presentation(file_path)
+        
+        if slide_idx < 1 or slide_idx > len(prs.slides):
+            logger.error(f"[set_solid_background] 幻灯片索引超出范围: {slide_idx}")
+            return False
+        
+        slide = prs.slides[slide_idx - 1]
+        
+        color = color.lstrip('#')
+        
+        slide.background.fill.solid()
+        
+        from pptx.dml.color import RGBColor
+        try:
+            r = int(color[0:2], 16)
+            g = int(color[2:4], 16)
+            b = int(color[4:6], 16)
+            slide.background.fill.fore_color.rgb = RGBColor(r, g, b)
+        except Exception as e:
+            logger.error(f"[set_solid_background] 解析颜色失败: {e}")
+            return False
+        
+        prs.save(file_path)
+        
+        logger.info(f"[set_solid_background] 纯色背景设置成功")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[set_solid_background] 设置纯色背景失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def set_picture_background(file_path: str, slide_idx: int, image_file_path: str) -> bool:
+    """
+    设置幻灯片图片背景
+    
+    Args:
+        file_path: PPT文件路径
+        slide_idx: 幻灯片索引（从1开始）
+        image_file_path: 图片文件路径
+    
+    Returns:
+        是否成功
+    """
+    logger.info(f"[set_picture_background] 设置图片背景: {file_path}, 幻灯片: {slide_idx}, 图片: {image_file_path}")
+    
+    try:
+        image_path = Path(image_file_path)
+        if not image_path.exists():
+            logger.error(f"[set_picture_background] 图片文件不存在: {image_file_path}")
+            return False
+        
+        prs = Presentation(file_path)
+        
+        if slide_idx < 1 or slide_idx > len(prs.slides):
+            logger.error(f"[set_picture_background] 幻灯片索引超出范围: {slide_idx}")
+            return False
+        
+        slide = prs.slides[slide_idx - 1]
+        
+        slide.background.fill.picture()
+        
+        try:
+            slide.shapes.add_picture(
+                str(image_path),
+                0, 0,
+                prs.slide_width,
+                prs.slide_height
+            )
+        except Exception as e:
+            logger.warning(f"[set_picture_background] 使用备用方法添加背景: {e}")
+        
+        prs.save(file_path)
+        
+        logger.info(f"[set_picture_background] 图片背景设置成功")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[set_picture_background] 设置图片背景失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def set_picture_background_v2(file_path: str, slide_idx: int, image_file_path: str) -> bool:
+    """
+    设置幻灯片图片背景（版本2：将图片作为底层形状添加）
+    
+    Args:
+        file_path: PPT文件路径
+        slide_idx: 幻灯片索引（从1开始）
+        image_file_path: 图片文件路径
+    
+    Returns:
+        是否成功
+    """
+    logger.info(f"[set_picture_background_v2] 设置图片背景v2: {file_path}, 幻灯片: {slide_idx}, 图片: {image_file_path}")
+    
+    try:
+        image_path = Path(image_file_path)
+        if not image_path.exists():
+            logger.error(f"[set_picture_background_v2] 图片文件不存在: {image_file_path}")
+            return False
+        
+        prs = Presentation(file_path)
+        
+        if slide_idx < 1 or slide_idx > len(prs.slides):
+            logger.error(f"[set_picture_background_v2] 幻灯片索引超出范围: {slide_idx}")
+            return False
+        
+        slide = prs.slides[slide_idx - 1]
+        
+        existing_shapes = list(slide.shapes)
+        
+        pic = slide.shapes.add_picture(
+            str(image_path),
+            0, 0,
+            prs.slide_width,
+            prs.slide_height
+        )
+        
+        if existing_shapes:
+            for _ in range(len(existing_shapes)):
+                slide.shapes._spTree.remove(slide.shapes._spTree[-1])
+                slide.shapes._spTree.insert(2, pic._element)
+                break
+        
+        prs.save(file_path)
+        
+        logger.info(f"[set_picture_background_v2] 图片背景设置成功")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[set_picture_background_v2] 设置图片背景失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def add_picture_shape_to_slide(
+    file_path: str,
+    slide_idx: int,
+    image_file_path: str,
+    left: float = 0,
+    top: float = 0,
+    width: Optional[float] = None,
+    height: Optional[float] = None
+) -> bool:
+    """
+    在幻灯片中添加图片形状
+    
+    Args:
+        file_path: PPT文件路径
+        slide_idx: 幻灯片索引（从1开始）
+        image_file_path: 图片文件路径
+        left: 左边距（磅）
+        top: 上边距（磅）
+        width: 宽度（磅，可选）
+        height: 高度（磅，可选）
+    
+    Returns:
+        是否成功
+    """
+    logger.info(f"[add_picture_shape_to_slide] 添加图片形状: {file_path}, 幻灯片: {slide_idx}")
+    
+    try:
+        image_path = Path(image_file_path)
+        if not image_path.exists():
+            logger.error(f"[add_picture_shape_to_slide] 图片文件不存在: {image_file_path}")
+            return False
+        
+        prs = Presentation(file_path)
+        
+        if slide_idx < 1 or slide_idx > len(prs.slides):
+            logger.error(f"[add_picture_shape_to_slide] 幻灯片索引超出范围: {slide_idx}")
+            return False
+        
+        slide = prs.slides[slide_idx - 1]
+        
+        left_emu = Emu(left * 914400 / 72)
+        top_emu = Emu(top * 914400 / 72)
+        
+        width_emu = None
+        height_emu = None
+        
+        if width:
+            width_emu = Emu(width * 914400 / 72)
+        if height:
+            height_emu = Emu(height * 914400 / 72)
+        
+        if width_emu and height_emu:
+            slide.shapes.add_picture(
+                str(image_path),
+                left_emu, top_emu,
+                width_emu, height_emu
+            )
+        else:
+            slide.shapes.add_picture(
+                str(image_path),
+                left_emu, top_emu
+            )
+        
+        prs.save(file_path)
+        
+        logger.info(f"[add_picture_shape_to_slide] 图片形状添加成功")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[add_picture_shape_to_slide] 添加图片形状失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def remove_background(file_path: str, slide_idx: int) -> bool:
+    """
+    移除幻灯片背景
+    
+    Args:
+        file_path: PPT文件路径
+        slide_idx: 幻灯片索引（从1开始）
+    
+    Returns:
+        是否成功
+    """
+    logger.info(f"[remove_background] 移除背景: {file_path}, 幻灯片: {slide_idx}")
+    
+    try:
+        prs = Presentation(file_path)
+        
+        if slide_idx < 1 or slide_idx > len(prs.slides):
+            logger.error(f"[remove_background] 幻灯片索引超出范围: {slide_idx}")
+            return False
+        
+        slide = prs.slides[slide_idx - 1]
+        
+        try:
+            if hasattr(slide, 'background') and hasattr(slide.background, 'fill'):
+                from pptx.enum.dml import MSO_FILL_TYPE
+                slide.background.fill.background()
+        except Exception as e:
+            logger.warning(f"[remove_background] 移除填充背景时出错: {e}")
+        
+        prs.save(file_path)
+        
+        logger.info(f"[remove_background] 背景移除成功")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[remove_background] 移除背景失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

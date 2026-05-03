@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import List, Optional, Any
 from pydantic import BaseModel
 from pathlib import Path
+import uuid
+from datetime import datetime
 
 from app.database import get_db
 from app.models import Document, Folder
@@ -26,6 +28,12 @@ from app.utils import (
     add_new_slide,
     delete_slide,
     reorder_slides,
+    get_background_info,
+    set_solid_background,
+    set_picture_background,
+    set_picture_background_v2,
+    add_picture_shape_to_slide,
+    remove_background,
 )
 
 router = APIRouter()
@@ -958,6 +966,300 @@ async def reorder_ppt_slides(
     
     return {
         "message": f"幻灯片从位置 {operation.old_idx} 移动到位置 {operation.new_idx} 成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+class SolidBackgroundOperation(BaseModel):
+    slide_idx: int
+    color: str
+
+
+class PictureBackgroundOperation(BaseModel):
+    slide_idx: int
+    image_path: Optional[str] = None
+
+
+class AddPictureShapeOperation(BaseModel):
+    slide_idx: int
+    image_path: str
+    left: float = 0
+    top: float = 0
+    width: Optional[float] = None
+    height: Optional[float] = None
+
+
+BACKGROUND_DIR = Path("uploads/backgrounds")
+BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def generate_unique_image_filename(original_filename: str) -> str:
+    ext = original_filename.split(".")[-1].lower() if "." in original_filename else "jpg"
+    if ext not in ["jpg", "jpeg", "png", "gif", "bmp", "webp"]:
+        ext = "jpg"
+    unique_id = uuid.uuid4().hex[:8]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{timestamp}_{unique_id}.{ext}"
+
+
+@router.get("/{doc_id}/ppt/background")
+async def get_ppt_background(
+    doc_id: int,
+    slide_idx: int = 1,
+    db: Session = Depends(get_db)
+):
+    """
+    获取指定幻灯片的背景信息
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        background = get_background_info(str(file_path), slide_idx)
+        return {
+            "success": True,
+            "slide_idx": slide_idx,
+            "background_type": background.background_type,
+            "color": background.color,
+            "image_path": background.image_path,
+            "image_filename": background.image_filename,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取背景信息失败: {str(e)}")
+
+
+@router.put("/{doc_id}/ppt/background/solid")
+async def set_ppt_solid_background(
+    doc_id: int,
+    operation: SolidBackgroundOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    设置幻灯片纯色背景
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = set_solid_background(str(file_path), operation.slide_idx, operation.color)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="设置纯色背景失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "纯色背景设置成功",
+        "slide_idx": operation.slide_idx,
+        "color": operation.color,
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/ppt/background/picture")
+async def set_ppt_picture_background(
+    doc_id: int,
+    slide_idx: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    设置幻灯片图片背景（上传图片）
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="请选择图片文件")
+    
+    filename = generate_unique_image_filename(file.filename)
+    image_file_path = BACKGROUND_DIR / filename
+    
+    content = await file.read()
+    with open(image_file_path, "wb") as f:
+        f.write(content)
+    
+    success = set_picture_background_v2(str(file_path), slide_idx, str(image_file_path))
+    
+    if not success:
+        if image_file_path.exists():
+            image_file_path.unlink()
+        raise HTTPException(status_code=500, detail="设置图片背景失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "图片背景设置成功",
+        "slide_idx": slide_idx,
+        "image_filename": filename,
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/ppt/picture")
+async def add_ppt_picture_shape(
+    doc_id: int,
+    slide_idx: int = Form(...),
+    left: float = Form(0),
+    top: float = Form(0),
+    width: Optional[float] = Form(None),
+    height: Optional[float] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    在幻灯片中添加图片形状
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="请选择图片文件")
+    
+    filename = generate_unique_image_filename(file.filename)
+    image_file_path = BACKGROUND_DIR / filename
+    
+    content = await file.read()
+    with open(image_file_path, "wb") as f:
+        f.write(content)
+    
+    success = add_picture_shape_to_slide(
+        str(file_path),
+        slide_idx,
+        str(image_file_path),
+        left,
+        top,
+        width,
+        height
+    )
+    
+    if not success:
+        if image_file_path.exists():
+            image_file_path.unlink()
+        raise HTTPException(status_code=500, detail="添加图片形状失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "图片形状添加成功",
+        "slide_idx": slide_idx,
+        "image_filename": filename,
+        "position": {
+            "left": left,
+            "top": top,
+            "width": width,
+            "height": height
+        },
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.delete("/{doc_id}/ppt/background")
+async def remove_ppt_background(
+    doc_id: int,
+    operation: SlideOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    移除幻灯片背景
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = remove_background(str(file_path), operation.slide_idx)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="移除背景失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "背景移除成功",
+        "slide_idx": operation.slide_idx,
         "document": {
             "id": doc.id,
             "title": doc.title,
