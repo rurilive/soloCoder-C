@@ -18,6 +18,14 @@ from app.utils import (
     get_sheet_data_as_json,
     get_sheet_metadata,
     get_sheet_data_paginated,
+    get_ppt_metadata,
+    get_slide_data_paginated,
+    get_ppt_data_as_json,
+    update_text_in_slide,
+    update_multiple_texts,
+    add_new_slide,
+    delete_slide,
+    reorder_slides,
 )
 
 router = APIRouter()
@@ -556,6 +564,400 @@ async def delete_excel_sheet(
     
     return {
         "message": f"工作表 '{operation.sheet_name}' 删除成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+class SlideTextUpdate(BaseModel):
+    slide_idx: int
+    shape_idx: int
+    text: str
+
+
+class BatchSlideTextUpdate(BaseModel):
+    updates: List[SlideTextUpdate]
+
+
+class SlideOperation(BaseModel):
+    slide_idx: int
+
+
+class AddSlideOperation(BaseModel):
+    layout_idx: int = 6
+    title_text: Optional[str] = None
+    content_text: Optional[str] = None
+
+
+class ReorderSlidesOperation(BaseModel):
+    old_idx: int
+    new_idx: int
+
+
+@router.get("/{doc_id}/ppt/metadata")
+async def get_ppt_metadata_endpoint(
+    doc_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    快速获取PPT文件的元数据（不加载所有内容）
+    适用于大型PPT，先获取幻灯片信息再决定如何加载
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        metadata = get_ppt_metadata(str(file_path))
+        return metadata
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取PPT元数据失败: {str(e)}")
+
+
+@router.get("/{doc_id}/ppt/data/paginated")
+async def get_ppt_data_paginated(
+    doc_id: int,
+    start_slide: int = 1,
+    end_slide: int = 10,
+    include_notes: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    分页获取PPT幻灯片数据
+    适用于大型PPT，每次只加载指定范围的幻灯片
+    
+    Args:
+        doc_id: 文档ID
+        start_slide: 起始幻灯片（从1开始）
+        end_slide: 结束幻灯片
+        include_notes: 是否包含备注
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    if start_slide < 1:
+        start_slide = 1
+    if end_slide < start_slide:
+        end_slide = start_slide + 9
+    
+    max_slides_per_request = 50
+    if end_slide - start_slide + 1 > max_slides_per_request:
+        end_slide = start_slide + max_slides_per_request - 1
+    
+    try:
+        data = get_slide_data_paginated(
+            str(file_path),
+            start_slide,
+            end_slide,
+            include_notes
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取PPT数据失败: {str(e)}")
+
+
+@router.get("/{doc_id}/ppt/data")
+async def get_ppt_data(
+    doc_id: int,
+    start_slide: Optional[int] = None,
+    end_slide: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    获取PPT文件的详细数据（JSON格式）
+    仅适用于PPT类型的文档
+    
+    注意：对于超过50张幻灯片的大型PPT，建议使用 /data/paginated 进行分页加载
+    
+    Args:
+        doc_id: 文档ID
+        start_slide: 可选，起始幻灯片（从1开始）
+        end_slide: 可选，结束幻灯片
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        slide_range = None
+        if start_slide is not None and end_slide is not None:
+            slide_range = (start_slide, end_slide)
+        
+        data = get_ppt_data_as_json(str(file_path), slide_range)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取PPT数据失败: {str(e)}")
+
+
+@router.put("/{doc_id}/ppt/text")
+async def update_ppt_text(
+    doc_id: int,
+    update: SlideTextUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    更新PPT中指定幻灯片中指定形状的文本
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = update_text_in_slide(
+        str(file_path),
+        update.slide_idx,
+        update.shape_idx,
+        update.text
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="更新文本失败，请检查幻灯片索引和形状索引是否正确")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "文本更新成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.put("/{doc_id}/ppt/texts")
+async def update_ppt_texts_batch(
+    doc_id: int,
+    batch_update: BatchSlideTextUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    批量更新PPT中的多个文本
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    updates_list = [
+        {
+            "slide_idx": u.slide_idx,
+            "shape_idx": u.shape_idx,
+            "text": u.text
+        }
+        for u in batch_update.updates
+    ]
+    
+    success, updated_count = update_multiple_texts(str(file_path), updates_list)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="批量更新文本失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"成功更新 {updated_count} 个文本",
+        "updated_count": updated_count,
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/ppt/slide")
+async def add_ppt_slide(
+    doc_id: int,
+    operation: AddSlideOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    在PPT中添加新幻灯片
+    
+    Args:
+        layout_idx: 布局索引（默认6是空白布局，0是标题布局）
+        title_text: 标题文本（可选）
+        content_text: 内容文本（可选）
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = add_new_slide(
+        str(file_path),
+        operation.layout_idx,
+        operation.title_text,
+        operation.content_text
+    )
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="添加幻灯片失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "幻灯片添加成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.delete("/{doc_id}/ppt/slide")
+async def delete_ppt_slide(
+    doc_id: int,
+    operation: SlideOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    从PPT中删除指定幻灯片
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = delete_slide(str(file_path), operation.slide_idx)
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="删除幻灯片失败，可能幻灯片索引不存在或是最后一张幻灯片")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"幻灯片 {operation.slide_idx} 删除成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.put("/{doc_id}/ppt/reorder")
+async def reorder_ppt_slides(
+    doc_id: int,
+    operation: ReorderSlidesOperation,
+    db: Session = Depends(get_db)
+):
+    """
+    重新排列PPT中的幻灯片顺序
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "ppt":
+        raise HTTPException(status_code=400, detail="此文档不是PPT格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = reorder_slides(
+        str(file_path),
+        operation.old_idx,
+        operation.new_idx
+    )
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="重新排列幻灯片失败，请检查索引是否正确")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"幻灯片从位置 {operation.old_idx} 移动到位置 {operation.new_idx} 成功",
         "document": {
             "id": doc.id,
             "title": doc.title,
