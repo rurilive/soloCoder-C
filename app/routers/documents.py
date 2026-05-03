@@ -34,6 +34,15 @@ from app.utils import (
     set_picture_background_v2,
     add_picture_shape_to_slide,
     remove_background,
+    parse_markdown_file,
+    update_markdown_content,
+    append_to_markdown,
+    prepend_to_markdown,
+    replace_section_in_markdown,
+    add_heading_to_markdown,
+    get_markdown_outline,
+    get_markdown_metadata,
+    get_markdown_data_as_json,
 )
 
 router = APIRouter()
@@ -1260,6 +1269,339 @@ async def remove_ppt_background(
     return {
         "message": "背景移除成功",
         "slide_idx": operation.slide_idx,
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+class MarkdownContentUpdate(BaseModel):
+    content: str
+
+
+class MarkdownSectionUpdate(BaseModel):
+    heading_text: str
+    new_content: str
+    heading_level: Optional[int] = None
+
+
+class MarkdownHeadingAdd(BaseModel):
+    heading_text: str
+    level: int = 2
+    content: str = ""
+
+
+@router.get("/{doc_id}/markdown/metadata")
+async def get_markdown_metadata_endpoint(
+    doc_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    快速获取Markdown文件的元数据
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        metadata = get_markdown_metadata(str(file_path))
+        return metadata
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取Markdown元数据失败: {str(e)}")
+
+
+@router.get("/{doc_id}/markdown/outline")
+async def get_markdown_outline_endpoint(
+    doc_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取Markdown文件的大纲结构
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        outline = get_markdown_outline(str(file_path))
+        return {
+            "success": True,
+            "outline": outline
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取Markdown大纲失败: {str(e)}")
+
+
+@router.get("/{doc_id}/markdown/data")
+async def get_markdown_data(
+    doc_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取Markdown文件的完整数据（JSON格式）
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    try:
+        data = get_markdown_data_as_json(str(file_path))
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取Markdown数据失败: {str(e)}")
+
+
+@router.put("/{doc_id}/markdown/content")
+async def update_markdown_content_endpoint(
+    doc_id: int,
+    update: MarkdownContentUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    完全替换Markdown文件的内容
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = update_markdown_content(str(file_path), update.content)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="更新Markdown内容失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "Markdown内容更新成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/markdown/append")
+async def append_to_markdown_endpoint(
+    doc_id: int,
+    update: MarkdownContentUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    向Markdown文件追加内容
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = append_to_markdown(str(file_path), update.content)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="追加内容到Markdown失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "内容追加成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/markdown/prepend")
+async def prepend_to_markdown_endpoint(
+    doc_id: int,
+    update: MarkdownContentUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    向Markdown文件开头插入内容
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = prepend_to_markdown(str(file_path), update.content)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="向Markdown开头插入内容失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": "内容插入成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.put("/{doc_id}/markdown/section")
+async def replace_markdown_section(
+    doc_id: int,
+    update: MarkdownSectionUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    替换Markdown文件中指定标题下的内容
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = replace_section_in_markdown(
+        str(file_path),
+        update.heading_text,
+        update.new_content,
+        update.heading_level
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"未找到标题 '{update.heading_text}'"
+        )
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"章节 '{update.heading_text}' 更新成功",
+        "document": {
+            "id": doc.id,
+            "title": doc.title,
+            "content": doc.content,
+            "html_content": doc.html_content,
+        }
+    }
+
+
+@router.post("/{doc_id}/markdown/heading")
+async def add_heading_to_markdown_endpoint(
+    doc_id: int,
+    update: MarkdownHeadingAdd,
+    db: Session = Depends(get_db)
+):
+    """
+    向Markdown文件添加新的标题和可选内容
+    """
+    doc = db.execute(select(Document).where(Document.id == doc_id)).scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    if doc.file_type != "markdown":
+        raise HTTPException(status_code=400, detail="此文档不是Markdown格式")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    
+    success = add_heading_to_markdown(
+        str(file_path),
+        update.heading_text,
+        update.level,
+        update.content
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="添加标题失败")
+    
+    content, html_content = parse_file(str(file_path), doc.file_type)
+    if content or html_content:
+        doc.content = content
+        doc.html_content = html_content
+        db.commit()
+        db.refresh(doc)
+    
+    return {
+        "message": f"标题 '{update.heading_text}' 添加成功",
         "document": {
             "id": doc.id,
             "title": doc.title,

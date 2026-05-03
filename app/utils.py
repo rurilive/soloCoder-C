@@ -6,7 +6,16 @@ from datetime import datetime
 from fastapi import UploadFile
 
 from app.parsers import (
-    parse_markdown, 
+    parse_markdown,
+    parse_markdown_file,
+    update_markdown_content,
+    append_to_markdown,
+    prepend_to_markdown,
+    replace_section_in_markdown,
+    add_heading_to_markdown,
+    get_markdown_outline,
+    get_markdown_metadata,
+    get_markdown_data_as_json,
     parse_doc, 
     parse_excel, 
     parse_ppt,

@@ -1,4 +1,15 @@
-from app.parsers.markdown_parser import parse_markdown
+from app.parsers.markdown_parser import (
+    parse_markdown,
+    parse_markdown_file,
+    update_markdown_content,
+    append_to_markdown,
+    prepend_to_markdown,
+    replace_section_in_markdown,
+    add_heading_to_markdown,
+    get_markdown_outline,
+    get_markdown_metadata,
+    get_markdown_data_as_json,
+)
 from app.parsers.doc_parser import parse_doc
 from app.parsers.excel_parser import (
     parse_excel,
@@ -32,6 +43,15 @@ from app.parsers.ppt_parser import (
 
 __all__ = [
     "parse_markdown", 
+    "parse_markdown_file",
+    "update_markdown_content",
+    "append_to_markdown",
+    "prepend_to_markdown",
+    "replace_section_in_markdown",
+    "add_heading_to_markdown",
+    "get_markdown_outline",
+    "get_markdown_metadata",
+    "get_markdown_data_as_json",
     "parse_doc", 
     "parse_excel", 
     "parse_ppt",
