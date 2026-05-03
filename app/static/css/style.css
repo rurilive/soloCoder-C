@@ -1085,3 +1085,177 @@ mark {
         justify-content: flex-start;
     }
 }
+
+.ppt-slide-container {
+    padding: 10px;
+}
+
+.slide-shapes {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.ppt-shape {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    transition: all 0.2s;
+}
+
+.ppt-shape:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ppt-shape.editable-shape:hover {
+    border-color: #667eea;
+    background: #f0f2ff;
+}
+
+.shape-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.shape-type {
+    font-size: 11px;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.shape-name {
+    font-size: 12px;
+    color: #888;
+}
+
+.shape-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.shape-text[contenteditable="true"] {
+    background: #fff8e1;
+    border: 1px dashed #ffc107;
+    border-radius: 4px;
+    padding: 10px;
+    cursor: text;
+    outline: none;
+    min-height: 40px;
+}
+
+.shape-text[contenteditable="true"]:hover {
+    background: #fff3cd;
+    border-color: #ffc107;
+}
+
+.shape-text[contenteditable="true"]:focus {
+    background: white;
+    border: 2px solid #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.shape-empty {
+    color: #aaa;
+    font-style: italic;
+}
+
+.shape-text-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.paragraph-text {
+    margin: 0;
+    padding: 5px 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.paragraph-text[contenteditable="true"] {
+    background: #fff8e1;
+    border: 1px dashed #ffc107;
+    border-radius: 4px;
+    padding: 8px 10px;
+    cursor: text;
+    outline: none;
+    min-height: 30px;
+}
+
+.paragraph-text[contenteditable="true"]:hover {
+    background: #fff3cd;
+}
+
+.paragraph-text[contenteditable="true"]:focus {
+    background: white;
+    border: 2px solid #667eea;
+}
+
+.ppt-table-container {
+    overflow-x: auto;
+    margin-top: 10px;
+}
+
+.ppt-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+}
+
+.ppt-table th,
+.ppt-table td {
+    border: 1px solid #ddd;
+    padding: 8px 10px;
+    text-align: left;
+}
+
+.ppt-table td {
+    background: white;
+}
+
+.slide-notes {
+    margin-top: 20px;
+    padding: 15px;
+    background: #fff3cd;
+    border: 1px solid #ffecb5;
+    border-radius: 8px;
+}
+
+.slide-notes h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #856404;
+}
+
+.slide-notes p {
+    margin: 0;
+    color: #856404;
+    font-size: 14px;
+}
+
+.form-hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: -10px;
+    padding: 5px 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.modal-overlay {
+    display: flex;
+}

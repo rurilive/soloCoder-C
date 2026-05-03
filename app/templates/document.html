@@ -34,6 +34,11 @@
     let currentSheetIndex = 0;
     let isExcelEditMode = false;
     
+    let pptData = null;
+    let pptMetadata = null;
+    let currentSlideIndex = 0;
+    let isPptEditMode = false;
+    
     let paginationState = {
         currentPage: 1,
         rowsPerPage: 100,
@@ -82,6 +87,9 @@
             if (currentDocument.file_type === 'excel') {
                 await loadExcelData();
                 renderExcelContent();
+            } else if (currentDocument.file_type === 'ppt') {
+                await loadPptData();
+                renderPptContent();
             } else if (currentDocument.html_content) {
                 contentDiv.innerHTML = currentDocument.html_content;
             } else if (currentDocument.content) {
@@ -97,6 +105,8 @@
             
             if (currentDocument.file_type === 'excel') {
                 addExcelEditButton();
+            } else if (currentDocument.file_type === 'ppt') {
+                addPptEditButton();
             }
         } catch (error) {
             console.error('加载文档失败:', error);
@@ -120,6 +130,18 @@
             excelEditBtn.innerHTML = '📊 Excel编辑模式';
             excelEditBtn.onclick = toggleExcelEditMode;
             headerActions.insertBefore(excelEditBtn, headerActions.firstChild);
+        }
+    }
+
+    function addPptEditButton() {
+        const headerActions = document.querySelector('.document-actions-header');
+        if (headerActions && !document.getElementById('ppt-edit-btn')) {
+            const pptEditBtn = document.createElement('button');
+            pptEditBtn.id = 'ppt-edit-btn';
+            pptEditBtn.className = 'btn btn-secondary';
+            pptEditBtn.innerHTML = '📽️ PPT编辑模式';
+            pptEditBtn.onclick = togglePptEditMode;
+            headerActions.insertBefore(pptEditBtn, headerActions.firstChild);
         }
     }
 
@@ -166,6 +188,73 @@
             }
         } catch (error) {
             console.error('加载Excel数据失败:', error);
+        }
+    }
+
+    async function loadPptData() {
+        try {
+            const metadataResponse = await fetch(`/api/documents/${currentDocId}/ppt/metadata`);
+            if (metadataResponse.ok) {
+                pptMetadata = await metadataResponse.json();
+                
+                if (pptMetadata.success) {
+                    const MAX_SLIDES_FULL_LOAD = 50;
+                    
+                    if (pptMetadata.slide_count <= MAX_SLIDES_FULL_LOAD) {
+                        const dataResponse = await fetch(`/api/documents/${currentDocId}/ppt/data`);
+                        if (dataResponse.ok) {
+                            pptData = await dataResponse.json();
+                            currentSlideIndex = 0;
+                        }
+                    } else {
+                        pptData = {
+                            success: true,
+                            slides: pptMetadata.slides.map((slide, index) => ({
+                                slide_idx: slide.slide_idx,
+                                layout_name: slide.layout_name,
+                                shape_count: slide.shape_count,
+                                is_paginated: true,
+                                shapes: [],
+                            })),
+                            slide_count: pptMetadata.slide_count,
+                            slide_width: pptMetadata.slide_width,
+                            slide_height: pptMetadata.slide_height,
+                            is_large_file: true,
+                        };
+                        currentSlideIndex = 0;
+                        
+                        if (pptMetadata.slides && pptMetadata.slides.length > 0) {
+                            await loadPaginatedSlideData(1);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('加载PPT数据失败:', error);
+        }
+    }
+
+    async function loadPaginatedSlideData(slideIdx) {
+        try {
+            const response = await fetch(
+                `/api/documents/${currentDocId}/ppt/data/paginated?start_slide=${slideIdx}&end_slide=${slideIdx}&include_notes=true`
+            );
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success && data.slides && data.slides.length > 0) {
+                    if (pptData && pptData.slides) {
+                        const slideIndex = pptData.slides.findIndex(s => s.slide_idx === slideIdx);
+                        if (slideIndex !== -1) {
+                            pptData.slides[slideIndex] = data.slides[0];
+                            pptData.slides[slideIndex].is_paginated = false;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('分页加载幻灯片数据失败:', error);
         }
     }
 
@@ -675,6 +764,544 @@
             } else {
                 const error = await response.json();
                 showToast(error.detail || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    function renderPptContent() {
+        const contentDiv = document.getElementById('document-content');
+        
+        if (!pptData || !pptData.success || !pptData.slides || pptData.slides.length === 0) {
+            if (currentDocument.html_content) {
+                contentDiv.innerHTML = currentDocument.html_content;
+            } else if (currentDocument.content) {
+                contentDiv.innerHTML = `<pre>${escapeHtml(currentDocument.content)}</pre>`;
+            }
+            return;
+        }
+        
+        let html = '';
+        
+        if (pptData.slides.length > 1) {
+            html += '<div class="sheet-tabs">';
+            pptData.slides.forEach((slide, index) => {
+                const activeClass = index === currentSlideIndex ? 'active' : '';
+                const shapeCount = slide.shape_count || 0;
+                html += `<button class="sheet-tab ${activeClass}" onclick="switchSlide(${index})">
+                    幻灯片 ${slide.slide_idx}
+                    <span class="sheet-row-count">${shapeCount}个形状</span>
+                </button>`;
+            });
+            html += '</div>';
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        
+        if (currentSlide.is_paginated) {
+            html += `<div class="pagination-info">
+                <div class="pagination-stats">
+                    <span class="stat-item"><strong>幻灯片:</strong> ${currentSlide.slide_idx} / ${pptData.slide_count}</span>
+                    <span class="stat-item"><strong>状态:</strong> 分页加载中...</span>
+                </div>
+            </div>`;
+        }
+        
+        html += renderSlideContent(currentSlide);
+        
+        if (isPptEditMode) {
+            html += `
+                <div class="excel-edit-actions">
+                    <button class="btn btn-primary" onclick="showAddSlideModal()">➕ 添加幻灯片</button>
+                    <button class="btn btn-danger" onclick="confirmDeletePptSlide()">🗑️ 删除当前幻灯片</button>
+                    <button class="btn btn-secondary" onclick="showReorderSlideModal()">🔄 重排幻灯片</button>
+                    <button class="btn btn-secondary" onclick="togglePptEditMode()">✓ 退出编辑模式</button>
+                </div>
+            `;
+        }
+        
+        contentDiv.innerHTML = html;
+        
+        if (currentSlide.is_paginated && !currentSlide._loaded) {
+            loadPaginatedSlideData(currentSlide.slide_idx).then(() => {
+                if (pptData && pptData.slides[currentSlideIndex]) {
+                    pptData.slides[currentSlideIndex]._loaded = true;
+                    renderPptContent();
+                }
+            });
+        }
+    }
+
+    function renderSlideContent(slide) {
+        if (!slide || !slide.shapes || slide.shapes.length === 0) {
+            return '<div class="empty-message">此幻灯片暂无内容</div>';
+        }
+        
+        let html = '<div class="ppt-slide-container">';
+        
+        if (slide.text_content) {
+            html += `<div class="slide-text-content" style="display: none;">${escapeHtml(slide.text_content)}</div>`;
+        }
+        
+        html += '<div class="slide-shapes">';
+        
+        slide.shapes.forEach((shape, shapeIdx) => {
+            html += renderShape(shape, shapeIdx, slide.slide_idx);
+        });
+        
+        html += '</div>';
+        
+        if (slide.notes) {
+            html += `<div class="slide-notes">
+                <h4>备注</h4>
+                <p>${escapeHtml(slide.notes)}</p>
+            </div>`;
+        }
+        
+        html += '</div>';
+        
+        return html;
+    }
+
+    function renderShape(shape, shapeIdx, slideIdx) {
+        let html = '<div class="ppt-shape';
+        
+        if (isPptEditMode && shape.text && shape.text.trim()) {
+            html += ' editable-shape';
+        }
+        
+        html += '"';
+        
+        if (shape.left !== null && shape.top !== null) {
+            html += ` style="position: relative; margin: 10px 0;"`;
+        }
+        
+        html += '>';
+        
+        html += `<div class="shape-header">
+            <span class="shape-type">${escapeHtml(shape.shape_type)}</span>
+            <span class="shape-name">${escapeHtml(shape.name || 'Shape ' + (shapeIdx + 1))}</span>
+        </div>`;
+        
+        if (shape.table) {
+            html += renderShapeTable(shape.table);
+        } else if (shape.text_frame && shape.text_frame.paragraphs && shape.text_frame.paragraphs.length > 0) {
+            html += renderShapeTextFrame(shape, shapeIdx, slideIdx);
+        } else if (shape.text) {
+            if (isPptEditMode && shape.text.trim()) {
+                html += `<div class="shape-text" 
+                    contenteditable="true" 
+                    data-slide-idx="${slideIdx}" 
+                    data-shape-idx="${shapeIdx}"
+                    onblur="handlePptShapeEdit(this)"
+                    onkeydown="handlePptShapeKeydown(event, this)">
+                    ${escapeHtml(shape.text)}
+                </div>`;
+            } else {
+                html += `<div class="shape-text">${escapeHtml(shape.text)}</div>`;
+            }
+        } else {
+            html += `<div class="shape-text shape-empty">(无文本内容)</div>`;
+        }
+        
+        html += '</div>';
+        
+        return html;
+    }
+
+    function renderShapeTable(table) {
+        if (!table || !table.cells || table.cells.length === 0) {
+            return '<div class="shape-text shape-empty">(空表格)</div>';
+        }
+        
+        let html = '<div class="ppt-table-container">';
+        html += '<table class="ppt-table">';
+        
+        table.cells.forEach((row, rowIdx) => {
+            html += '<tr>';
+            row.forEach((cell, colIdx) => {
+                html += `<td>${escapeHtml(cell.text || '')}</td>`;
+            });
+            html += '</tr>';
+        });
+        
+        html += '</table>';
+        html += '</div>';
+        
+        return html;
+    }
+
+    function renderShapeTextFrame(shape, shapeIdx, slideIdx) {
+        let html = '<div class="shape-text-frame">';
+        
+        shape.text_frame.paragraphs.forEach((para, paraIdx) => {
+            let level = para.level || 0;
+            let indentStyle = `padding-left: ${level * 20}px;`;
+            
+            if (isPptEditMode && para.text) {
+                html += `<p class="paragraph-text" 
+                    style="${indentStyle}"
+                    contenteditable="true" 
+                    data-slide-idx="${slideIdx}" 
+                    data-shape-idx="${shapeIdx}"
+                    data-para-idx="${paraIdx}"
+                    onblur="handlePptParagraphEdit(this)"
+                    onkeydown="handlePptShapeKeydown(event, this)">
+                    ${escapeHtml(para.text)}
+                </p>`;
+            } else {
+                html += `<p class="paragraph-text" style="${indentStyle}">${escapeHtml(para.text || '')}</p>`;
+            }
+        });
+        
+        html += '</div>';
+        
+        return html;
+    }
+
+    async function switchSlide(index) {
+        currentSlideIndex = index;
+        
+        const targetSlide = pptData.slides[index];
+        
+        if (targetSlide.is_paginated && !targetSlide._loaded) {
+            await loadPaginatedSlideData(targetSlide.slide_idx);
+            if (pptData && pptData.slides[currentSlideIndex]) {
+                pptData.slides[currentSlideIndex]._loaded = true;
+            }
+        }
+        
+        renderPptContent();
+    }
+
+    function togglePptEditMode() {
+        isPptEditMode = !isPptEditMode;
+        const btn = document.getElementById('ppt-edit-btn');
+        if (btn) {
+            btn.innerHTML = isPptEditMode ? '✓ 退出PPT编辑' : '📽️ PPT编辑模式';
+            btn.className = isPptEditMode ? 'btn btn-success' : 'btn btn-secondary';
+        }
+        renderPptContent();
+        
+        if (isPptEditMode) {
+            showToast('已进入PPT编辑模式，点击文本内容即可编辑', 'info');
+        }
+    }
+
+    async function handlePptShapeEdit(element) {
+        const slideIdx = parseInt(element.dataset.slideIdx);
+        const shapeIdx = parseInt(element.dataset.shapeIdx);
+        const newValue = element.textContent;
+        
+        const slide = pptData.slides.find(s => s.slide_idx === slideIdx);
+        if (slide && slide.shapes && slide.shapes[shapeIdx]) {
+            const shape = slide.shapes[shapeIdx];
+            if (shape.text === newValue) {
+                return;
+            }
+        }
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/text`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    slide_idx: slideIdx,
+                    shape_idx: shapeIdx,
+                    text: newValue
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (slide && slide.shapes && slide.shapes[shapeIdx]) {
+                    slide.shapes[shapeIdx].text = newValue;
+                }
+                showToast('文本更新成功', 'success');
+                
+                if (result.document) {
+                    if (result.document.html_content) {
+                        currentDocument.html_content = result.document.html_content;
+                    }
+                    if (result.document.content) {
+                        currentDocument.content = result.document.content;
+                    }
+                }
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '更新失败', 'error');
+                if (slide && slide.shapes && slide.shapes[shapeIdx]) {
+                    element.textContent = slide.shapes[shapeIdx].text || '';
+                }
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+            if (slide && slide.shapes && slide.shapes[shapeIdx]) {
+                element.textContent = slide.shapes[shapeIdx].text || '';
+            }
+        }
+    }
+
+    async function handlePptParagraphEdit(element) {
+        const slideIdx = parseInt(element.dataset.slideIdx);
+        const shapeIdx = parseInt(element.dataset.shapeIdx);
+        const paraIdx = parseInt(element.dataset.paraIdx);
+        const newValue = element.textContent;
+        
+        const slide = pptData.slides.find(s => s.slide_idx === slideIdx);
+        if (slide && slide.shapes && slide.shapes[shapeIdx]) {
+            const shape = slide.shapes[shapeIdx];
+            if (shape.text_frame && shape.text_frame.paragraphs && shape.text_frame.paragraphs[paraIdx]) {
+                if (shape.text_frame.paragraphs[paraIdx].text === newValue) {
+                    return;
+                }
+            }
+        }
+        
+        await handlePptShapeEdit(element);
+    }
+
+    function handlePptShapeKeydown(event, element) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            element.blur();
+        }
+        if (event.key === 'Escape') {
+            const slideIdx = parseInt(element.dataset.slideIdx);
+            const shapeIdx = parseInt(element.dataset.shapeIdx);
+            const paraIdx = element.dataset.paraIdx !== undefined ? parseInt(element.dataset.paraIdx) : null;
+            
+            const slide = pptData.slides.find(s => s.slide_idx === slideIdx);
+            if (slide && slide.shapes && slide.shapes[shapeIdx]) {
+                const shape = slide.shapes[shapeIdx];
+                if (paraIdx !== null && shape.text_frame && shape.text_frame.paragraphs && shape.text_frame.paragraphs[paraIdx]) {
+                    element.textContent = shape.text_frame.paragraphs[paraIdx].text || '';
+                } else {
+                    element.textContent = shape.text || '';
+                }
+            }
+            element.blur();
+        }
+    }
+
+    function showAddSlideModal() {
+        const modalHtml = `
+            <div id="add-slide-modal-overlay" class="modal-overlay" onclick="closeAddSlideModal(event)">
+                <div class="modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3>添加新幻灯片</h3>
+                        <button class="modal-close" onclick="closeAddSlideModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-slide-form">
+                            <div class="form-group">
+                                <label for="slide-layout">幻灯片布局</label>
+                                <select id="slide-layout" class="form-select">
+                                    <option value="6">空白布局 (推荐)</option>
+                                    <option value="0">标题幻灯片</option>
+                                    <option value="1">标题和内容</option>
+                                    <option value="2">节标题</option>
+                                    <option value="3">两栏内容</option>
+                                    <option value="4">比较</option>
+                                    <option value="5">仅标题</option>
+                                    <option value="7">内容与标题</option>
+                                    <option value="8">图片与标题</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="slide-title">标题文本 (可选)</label>
+                                <input type="text" id="slide-title" class="form-input" placeholder="输入标题">
+                            </div>
+                            <div class="form-group">
+                                <label for="slide-content">内容文本 (可选)</label>
+                                <textarea id="slide-content" class="form-textarea" placeholder="输入内容"></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeAddSlideModal()">取消</button>
+                        <button type="button" class="btn btn-primary" onclick="submitAddSlideForm()">添加</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    function closeAddSlideModal(event) {
+        if (!event || event.target === event.currentTarget) {
+            const overlay = document.getElementById('add-slide-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+    }
+
+    async function submitAddSlideForm() {
+        const layoutIdx = parseInt(document.getElementById('slide-layout').value);
+        const titleText = document.getElementById('slide-title').value.trim();
+        const contentText = document.getElementById('slide-content').value.trim();
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/slide`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    layout_idx: layoutIdx,
+                    title_text: titleText || null,
+                    content_text: contentText || null
+                })
+            });
+            
+            if (response.ok) {
+                showToast('幻灯片添加成功', 'success');
+                closeAddSlideModal();
+                await loadPptData();
+                currentSlideIndex = pptData.slides.length - 1;
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '添加失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    async function confirmDeletePptSlide() {
+        if (!pptData || !pptData.slides || pptData.slides.length <= 1) {
+            showToast('至少需要保留一张幻灯片', 'error');
+            return;
+        }
+        
+        const currentSlide = pptData.slides[currentSlideIndex];
+        if (!confirm(`确定要删除幻灯片 ${currentSlide.slide_idx} 吗？此操作不可撤销。`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/slide`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    slide_idx: currentSlide.slide_idx
+                })
+            });
+            
+            if (response.ok) {
+                showToast(`幻灯片 ${currentSlide.slide_idx} 删除成功`, 'success');
+                await loadPptData();
+                currentSlideIndex = Math.max(0, currentSlideIndex - 1);
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    function showReorderSlideModal() {
+        if (!pptData || !pptData.slides || pptData.slides.length < 2) {
+            showToast('至少需要两张幻灯片才能重排', 'error');
+            return;
+        }
+        
+        let optionsHtml = '';
+        pptData.slides.forEach((slide, index) => {
+            optionsHtml += `<option value="${slide.slide_idx}">
+                幻灯片 ${slide.slide_idx} - ${escapeHtml(slide.layout_name || '未知布局')}
+            </option>`;
+        });
+        
+        const modalHtml = `
+            <div id="reorder-slide-modal-overlay" class="modal-overlay" onclick="closeReorderSlideModal(event)">
+                <div class="modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3>重排幻灯片</h3>
+                        <button class="modal-close" onclick="closeReorderSlideModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="reorder-slide-form">
+                            <div class="form-group">
+                                <label for="slide-old-idx">移动哪张幻灯片?</label>
+                                <select id="slide-old-idx" class="form-select">
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="slide-new-idx">移动到哪个位置?</label>
+                                <select id="slide-new-idx" class="form-select">
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                            <div class="form-hint">
+                                提示: 幻灯片将被移动到目标位置，其他幻灯片会相应调整位置。
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeReorderSlideModal()">取消</button>
+                        <button type="button" class="btn btn-primary" onclick="submitReorderSlideForm()">移动</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        document.getElementById('slide-old-idx').value = pptData.slides[currentSlideIndex].slide_idx;
+    }
+
+    function closeReorderSlideModal(event) {
+        if (!event || event.target === event.currentTarget) {
+            const overlay = document.getElementById('reorder-slide-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+    }
+
+    async function submitReorderSlideForm() {
+        const oldIdx = parseInt(document.getElementById('slide-old-idx').value);
+        const newIdx = parseInt(document.getElementById('slide-new-idx').value);
+        
+        if (oldIdx === newIdx) {
+            showToast('位置相同，无需移动', 'info');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/documents/${currentDocId}/ppt/reorder`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    old_idx: oldIdx,
+                    new_idx: newIdx
+                })
+            });
+            
+            if (response.ok) {
+                showToast(`幻灯片已从位置 ${oldIdx} 移动到 ${newIdx}`, 'success');
+                closeReorderSlideModal();
+                await loadPptData();
+                const newCurrentIndex = pptData.slides.findIndex(s => s.slide_idx === newIdx);
+                currentSlideIndex = newCurrentIndex !== -1 ? newCurrentIndex : 0;
+                renderPptContent();
+            } else {
+                const error = await response.json();
+                showToast(error.detail || '移动失败', 'error');
             }
         } catch (error) {
             showToast('网络错误', 'error');
