@@ -1363,3 +1363,154 @@ mark {
     background: #f8f9fa;
     border-radius: 8px;
 }
+
+.markdown-editor-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.markdown-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px 8px 0 0;
+    flex-wrap: wrap;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    border-right: 1px solid #e0e0e0;
+}
+
+.toolbar-group:last-child {
+    border-right: none;
+}
+
+.toolbar-btn {
+    padding: 6px 10px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    min-width: 32px;
+}
+
+.toolbar-btn:hover {
+    background: #f0f2ff;
+    border-color: #667eea;
+}
+
+.toolbar-btn:active {
+    background: #e9ecef;
+}
+
+.toolbar-btn strong,
+.toolbar-btn em,
+.toolbar-btn s {
+    pointer-events: none;
+}
+
+.markdown-split-view {
+    display: flex;
+    flex: 1;
+    min-height: 500px;
+    border: 1px solid #e0e0e0;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+.markdown-editor-pane,
+.markdown-preview-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.markdown-editor-pane {
+    border-right: 1px solid #e0e0e0;
+}
+
+.pane-header {
+    padding: 8px 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #666;
+}
+
+.pane-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.markdown-editor-textarea {
+    flex: 1;
+    width: 100%;
+    padding: 15px;
+    border: none;
+    resize: none;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    background: white;
+    outline: none;
+}
+
+.markdown-editor-textarea:focus {
+    background: #fffef5;
+}
+
+.markdown-preview-content {
+    flex: 1;
+    padding: 15px 20px;
+    overflow-y: auto;
+    background: white;
+}
+
+.markdown-edit-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .markdown-split-view {
+        flex-direction: column;
+    }
+    
+    .markdown-editor-pane {
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .markdown-toolbar {
+        padding: 8px 10px;
+        gap: 5px;
+    }
+    
+    .toolbar-group {
+        padding: 0 5px;
+    }
+    
+    .toolbar-btn {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+}
