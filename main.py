@@ -51,6 +51,7 @@ class ClipboardItem(Base):
     filename = Column(String(255), nullable=True)
     file_size = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
     expires_at = Column(DateTime, nullable=False)
 
 
@@ -80,6 +81,7 @@ class ClipboardResponse(BaseModel):
     id: str
     type: str
     created_at: datetime
+    updated_at: datetime
     expires_at: datetime
     content: Optional[str] = None
     filename: Optional[str] = None
@@ -147,6 +149,12 @@ async def index():
             .btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%; font-weight: 500; transition: transform 0.2s, box-shadow 0.2s; }
             .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
             .btn:active { transform: translateY(0); }
+            .btn-secondary { background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px; margin-top: 8px; }
+            .btn-secondary:hover { background: #5a6268; }
+            .btn-success { background: #28a745; color: white; }
+            .btn-success:hover { background: #218838; }
+            .btn-warning { background: #ffc107; color: #333; }
+            .btn-warning:hover { background: #e0a800; }
             .result { margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; display: none; }
             .result.show { display: block; }
             .result h3 { color: #667eea; margin-bottom: 12px; }
@@ -163,6 +171,20 @@ async def index():
             .retrieved-content.show { display: block; }
             .retrieved-text { background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
             .download-btn { display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin-top: 12px; }
+            .paste-hint { padding: 20px; background: #e8f4fd; border: 2px dashed #667eea; border-radius: 8px; text-align: center; margin-bottom: 16px; color: #667eea; }
+            .paste-hint.active { background: #d4edda; border-color: #28a745; color: #28a745; }
+            .edit-mode { background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 16px; display: none; }
+            .edit-mode.active { display: block; }
+            .action-buttons { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+            .extend-section { margin-top: 16px; padding: 12px; background: #e7f3ff; border-radius: 8px; }
+            .extend-row { display: flex; gap: 12px; align-items: center; }
+            .extend-row select { flex: 1; }
+            .hidden { display: none !important; }
+            .edit-textarea { width: 100%; min-height: 150px; padding: 12px; border: 2px solid #ffc107; border-radius: 8px; font-size: 14px; resize: vertical; margin-bottom: 12px; }
+            .edit-file-input { margin-bottom: 12px; }
+            .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 8px; background: white; border-radius: 4px; }
+            .info-row label { margin-bottom: 0; color: #666; font-weight: normal; }
+            .info-row span { font-family: monospace; color: #333; }
         </style>
     </head>
     <body>
@@ -173,6 +195,10 @@ async def index():
                 <div class="tab-container">
                     <button class="tab active" onclick="switchTab('text')">文本</button>
                     <button class="tab" onclick="switchTab('file')">文件</button>
+                </div>
+                
+                <div id="paste-hint" class="paste-hint">
+                    💡 提示：按 Ctrl+V 可以直接粘贴文本或文件！
                 </div>
                 
                 <div id="text-tab" class="tab-content active">
@@ -232,25 +258,126 @@ async def index():
                 
                 <div id="retrieved-content" class="retrieved-content">
                     <h3 id="retrieved-type" style="margin-bottom: 12px; color: #667eea;"></h3>
+                    
+                    <div class="info-row">
+                        <label>创建时间：</label>
+                        <span id="retrieved-created"></span>
+                    </div>
+                    <div class="info-row">
+                        <label>更新时间：</label>
+                        <span id="retrieved-updated"></span>
+                    </div>
+                    <div class="info-row">
+                        <label>过期时间：</label>
+                        <span id="retrieved-expires"></span>
+                    </div>
+                    
                     <div id="retrieved-text-container" style="display: none;">
                         <div class="retrieved-text" id="retrieved-text"></div>
-                        <button class="copy-btn" onclick="copyText()">复制文本</button>
+                        <div class="action-buttons">
+                            <button class="btn-secondary" onclick="copyText()">复制文本</button>
+                            <button class="btn-secondary btn-warning" onclick="startEditText()">编辑内容</button>
+                        </div>
+                        
+                        <div id="edit-text-mode" class="edit-mode">
+                            <label>编辑文本：</label>
+                            <textarea id="edit-textarea" class="edit-textarea"></textarea>
+                            <div class="action-buttons">
+                                <button class="btn-secondary btn-success" onclick="saveEditText()">保存修改</button>
+                                <button class="btn-secondary" onclick="cancelEditText()">取消</button>
+                            </div>
+                        </div>
                     </div>
+                    
                     <div id="retrieved-file-container" style="display: none;">
                         <p style="margin-bottom: 8px;"><strong>文件名：</strong><span id="retrieved-filename"></span></p>
                         <p style="margin-bottom: 8px;"><strong>文件大小：</strong><span id="retrieved-size"></span></p>
-                        <a class="download-btn" id="download-link" href="#" download>下载文件</a>
+                        <div class="action-buttons">
+                            <a class="download-btn" id="download-link" href="#" download>下载文件</a>
+                            <button class="btn-secondary btn-warning" onclick="startEditFile()">更换文件</button>
+                        </div>
+                        
+                        <div id="edit-file-mode" class="edit-mode">
+                            <label>选择新文件：</label>
+                            <input type="file" id="edit-file-input" class="edit-file-input">
+                            <div class="action-buttons">
+                                <button class="btn-secondary btn-success" onclick="saveEditFile()">保存修改</button>
+                                <button class="btn-secondary" onclick="cancelEditFile()">取消</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="extend-section">
+                        <label style="margin-bottom: 8px; display: block; color: #333;">⏰ 延长有效时间：</label>
+                        <div class="extend-row">
+                            <select id="extend-hours">
+                                <option value="1">+ 1 小时</option>
+                                <option value="6">+ 6 小时</option>
+                                <option value="12">+ 12 小时</option>
+                                <option value="24" selected>+ 24 小时</option>
+                            </select>
+                            <button class="btn-secondary" onclick="extendExpiration()">延长时间</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         
         <script>
+            let currentRetrievedId = null;
+            let currentRetrievedData = null;
+            
             function switchTab(type) {
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 event.target.classList.add('active');
                 document.getElementById(type + '-tab').classList.add('active');
+            }
+            
+            document.addEventListener('paste', async function(e) {
+                const items = e.clipboardData.items;
+                const pasteHint = document.getElementById('paste-hint');
+                pasteHint.classList.add('active');
+                setTimeout(() => pasteHint.classList.remove('active'), 1000);
+                
+                for (let item of items) {
+                    if (item.type.indexOf('image') !== -1) {
+                        const file = item.getAsFile();
+                        handlePastedFile(file);
+                        return;
+                    } else if (item.type === 'text/plain') {
+                        item.getAsString(function(text) {
+                            if (text.trim()) {
+                                handlePastedText(text);
+                            }
+                        });
+                        return;
+                    }
+                }
+                
+                if (e.clipboardData.files.length > 0) {
+                    handlePastedFile(e.clipboardData.files[0]);
+                }
+            });
+            
+            function handlePastedText(text) {
+                switchTab('text');
+                document.getElementById('text-content').value = text;
+                document.querySelectorAll('.tab')[0].classList.add('active');
+                document.querySelectorAll('.tab')[1].classList.remove('active');
+                document.getElementById('text-tab').classList.add('active');
+                document.getElementById('file-tab').classList.remove('active');
+            }
+            
+            function handlePastedFile(file) {
+                switchTab('file');
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                document.getElementById('file-input').files = dataTransfer.files;
+                document.querySelectorAll('.tab')[1].classList.add('active');
+                document.querySelectorAll('.tab')[0].classList.remove('active');
+                document.getElementById('file-tab').classList.add('active');
+                document.getElementById('text-tab').classList.remove('active');
             }
             
             async function saveText() {
@@ -329,6 +456,8 @@ async def index():
                         throw new Error('内容不存在或已过期');
                     }
                     const data = await response.json();
+                    currentRetrievedId = id;
+                    currentRetrievedData = data;
                     showRetrieved(data, id);
                 } catch (err) {
                     alert(err.message);
@@ -340,11 +469,16 @@ async def index():
                 const textContainer = document.getElementById('retrieved-text-container');
                 const fileContainer = document.getElementById('retrieved-file-container');
                 
+                document.getElementById('retrieved-created').textContent = new Date(data.created_at).toLocaleString('zh-CN');
+                document.getElementById('retrieved-updated').textContent = new Date(data.updated_at).toLocaleString('zh-CN');
+                document.getElementById('retrieved-expires').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
+                
                 if (data.type === 'text') {
                     document.getElementById('retrieved-type').textContent = '📝 文本内容';
                     document.getElementById('retrieved-text').textContent = data.content;
                     textContainer.style.display = 'block';
                     fileContainer.style.display = 'none';
+                    document.getElementById('edit-text-mode').classList.remove('active');
                 } else {
                     document.getElementById('retrieved-type').textContent = '📁 文件内容';
                     document.getElementById('retrieved-filename').textContent = data.filename;
@@ -353,8 +487,121 @@ async def index():
                     document.getElementById('download-link').download = data.filename;
                     textContainer.style.display = 'none';
                     fileContainer.style.display = 'block';
+                    document.getElementById('edit-file-mode').classList.remove('active');
                 }
                 container.classList.add('show');
+            }
+            
+            function startEditText() {
+                if (!currentRetrievedId) return;
+                const text = document.getElementById('retrieved-text').textContent;
+                document.getElementById('edit-textarea').value = text;
+                document.getElementById('edit-text-mode').classList.add('active');
+            }
+            
+            function cancelEditText() {
+                document.getElementById('edit-text-mode').classList.remove('active');
+            }
+            
+            async function saveEditText() {
+                if (!currentRetrievedId) return;
+                const content = document.getElementById('edit-textarea').value;
+                
+                if (!content.trim()) {
+                    alert('文本内容不能为空');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/api/' + currentRetrievedId + '/text', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({content})
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('更新失败');
+                    }
+                    
+                    const data = await response.json();
+                    currentRetrievedData = data;
+                    document.getElementById('retrieved-text').textContent = content;
+                    document.getElementById('retrieved-updated').textContent = new Date(data.updated_at).toLocaleString('zh-CN');
+                    document.getElementById('edit-text-mode').classList.remove('active');
+                    alert('✅ 更新成功！');
+                } catch (err) {
+                    alert('更新失败：' + err.message);
+                }
+            }
+            
+            function startEditFile() {
+                if (!currentRetrievedId) return;
+                document.getElementById('edit-file-input').value = '';
+                document.getElementById('edit-file-mode').classList.add('active');
+            }
+            
+            function cancelEditFile() {
+                document.getElementById('edit-file-mode').classList.remove('active');
+            }
+            
+            async function saveEditFile() {
+                if (!currentRetrievedId) return;
+                const fileInput = document.getElementById('edit-file-input');
+                
+                if (!fileInput.files.length) {
+                    alert('请选择文件');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                
+                try {
+                    const response = await fetch('/api/' + currentRetrievedId + '/file', {
+                        method: 'PUT',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('更新失败');
+                    }
+                    
+                    const data = await response.json();
+                    currentRetrievedData = data;
+                    document.getElementById('retrieved-filename').textContent = data.filename;
+                    document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
+                    document.getElementById('retrieved-updated').textContent = new Date(data.updated_at).toLocaleString('zh-CN');
+                    document.getElementById('download-link').href = '/api/' + currentRetrievedId + '/download';
+                    document.getElementById('download-link').download = data.filename;
+                    document.getElementById('edit-file-mode').classList.remove('active');
+                    alert('✅ 文件更新成功！');
+                } catch (err) {
+                    alert('更新失败：' + err.message);
+                }
+            }
+            
+            async function extendExpiration() {
+                if (!currentRetrievedId) return;
+                const addHours = parseInt(document.getElementById('extend-hours').value);
+                
+                try {
+                    const response = await fetch('/api/' + currentRetrievedId + '/extend', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({add_hours: addHours})
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('延长时间失败');
+                    }
+                    
+                    const data = await response.json();
+                    currentRetrievedData = data;
+                    document.getElementById('retrieved-expires').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
+                    alert('✅ 已成功延长 ' + addHours + ' 小时！\\n新过期时间：' + new Date(data.expires_at).toLocaleString('zh-CN'));
+                } catch (err) {
+                    alert('延长时间失败：' + err.message);
+                }
             }
             
             function formatSize(bytes) {
@@ -392,6 +639,7 @@ async def save_text(item: ClipboardText):
         id=cid,
         type="text",
         created_at=created_at,
+        updated_at=created_at,
         expires_at=expires_at,
         content=item.content
     )
@@ -427,6 +675,7 @@ async def save_file(file: UploadFile = File(...), expires_hours: int = Form(24))
         id=cid,
         type="file",
         created_at=created_at,
+        updated_at=created_at,
         expires_at=expires_at,
         filename=file.filename,
         file_size=len(file_content)
@@ -449,6 +698,7 @@ async def get_content(cid: str):
                 id=item.id,
                 type="text",
                 created_at=item.created_at,
+                updated_at=item.updated_at,
                 expires_at=item.expires_at,
                 content=item.content
             )
@@ -457,6 +707,7 @@ async def get_content(cid: str):
                 id=item.id,
                 type="file",
                 created_at=item.created_at,
+                updated_at=item.updated_at,
                 expires_at=item.expires_at,
                 filename=item.filename,
                 file_size=item.file_size
@@ -486,6 +737,116 @@ async def download_file(cid: str):
             path=filepath,
             filename=item.filename
         )
+
+
+class UpdateTextRequest(BaseModel):
+    content: str
+
+
+@app.put("/api/{cid}/text", response_model=ClipboardResponse)
+async def update_text(cid: str, item: UpdateTextRequest):
+    cleanup_expired()
+    
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        db_item = db.execute(stmt).scalar_one_or_none()
+        
+        if db_item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        if db_item.type != "text":
+            raise HTTPException(status_code=400, detail="只能更新文本类型的内容")
+        
+        db_item.content = item.content
+        db.commit()
+        db.refresh(db_item)
+        
+        return ClipboardResponse(
+            id=db_item.id,
+            type=db_item.type,
+            created_at=db_item.created_at,
+            updated_at=db_item.updated_at,
+            expires_at=db_item.expires_at,
+            content=db_item.content
+        )
+
+
+@app.put("/api/{cid}/file", response_model=ClipboardResponse)
+async def update_file(cid: str, file: UploadFile = File(...)):
+    cleanup_expired()
+    
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        db_item = db.execute(stmt).scalar_one_or_none()
+        
+        if db_item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        if db_item.type != "file":
+            raise HTTPException(status_code=400, detail="只能更新文件类型的内容")
+        
+        filepath = os.path.join(DATA_DIR, cid)
+        file_content = await file.read()
+        
+        async with aiofiles.open(filepath, "wb") as f:
+            await f.write(file_content)
+        
+        db_item.filename = file.filename
+        db_item.file_size = len(file_content)
+        db.commit()
+        db.refresh(db_item)
+        
+        return ClipboardResponse(
+            id=db_item.id,
+            type=db_item.type,
+            created_at=db_item.created_at,
+            updated_at=db_item.updated_at,
+            expires_at=db_item.expires_at,
+            filename=db_item.filename,
+            file_size=db_item.file_size
+        )
+
+
+class ExtendExpirationRequest(BaseModel):
+    add_hours: int
+
+
+@app.put("/api/{cid}/extend", response_model=ClipboardResponse)
+async def extend_expiration(cid: str, request: ExtendExpirationRequest):
+    cleanup_expired()
+    
+    add_hours = min(request.add_hours, MAX_STORAGE_HOURS)
+    
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        db_item = db.execute(stmt).scalar_one_or_none()
+        
+        if db_item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        db_item.expires_at = db_item.expires_at + timedelta(hours=add_hours)
+        db.commit()
+        db.refresh(db_item)
+        
+        if db_item.type == "text":
+            return ClipboardResponse(
+                id=db_item.id,
+                type=db_item.type,
+                created_at=db_item.created_at,
+                updated_at=db_item.updated_at,
+                expires_at=db_item.expires_at,
+                content=db_item.content
+            )
+        else:
+            return ClipboardResponse(
+                id=db_item.id,
+                type=db_item.type,
+                created_at=db_item.created_at,
+                updated_at=db_item.updated_at,
+                expires_at=db_item.expires_at,
+                filename=db_item.filename,
+                file_size=db_item.file_size
+            )
 
 
 @app.delete("/api/{cid}")
