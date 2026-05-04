@@ -335,28 +335,64 @@ async def index():
             }
             
             document.addEventListener('paste', async function(e) {
-                const items = e.clipboardData.items;
                 const pasteHint = document.getElementById('paste-hint');
                 pasteHint.classList.add('active');
                 setTimeout(() => pasteHint.classList.remove('active'), 1000);
                 
-                for (let item of items) {
-                    if (item.type.indexOf('image') !== -1) {
-                        const file = item.getAsFile();
-                        handlePastedFile(file);
-                        return;
-                    } else if (item.type === 'text/plain') {
-                        item.getAsString(function(text) {
-                            if (text.trim()) {
-                                handlePastedText(text);
-                            }
-                        });
-                        return;
+                // 检查是否有文件被粘贴
+                let hasFile = false;
+                let fileToPaste = null;
+                
+                // 方式1: 检查 clipboardData.files
+                if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+                    hasFile = true;
+                    fileToPaste = e.clipboardData.files[0];
+                }
+                
+                // 方式2: 检查 items 中的 file 类型
+                if (!hasFile && e.clipboardData.items) {
+                    for (let item of e.clipboardData.items) {
+                        if (item.kind === 'file') {
+                            hasFile = true;
+                            fileToPaste = item.getAsFile();
+                            break;
+                        }
                     }
                 }
                 
-                if (e.clipboardData.files.length > 0) {
-                    handlePastedFile(e.clipboardData.files[0]);
+                if (hasFile && fileToPaste) {
+                    // 粘贴的是文件，阻止默认行为并处理
+                    e.preventDefault();
+                    handlePastedFile(fileToPaste);
+                    return;
+                }
+                
+                // 粘贴的是文本
+                // 检查焦点是否在文本输入框中
+                const activeElement = document.activeElement;
+                const isFocusedOnInput = activeElement && (
+                    activeElement.tagName === 'TEXTAREA' || 
+                    (activeElement.tagName === 'INPUT' && (activeElement.type === 'text' || activeElement.type === ''))
+                );
+                
+                if (isFocusedOnInput) {
+                    // 焦点在输入框中，不阻止默认行为，让浏览器正常处理粘贴
+                    return;
+                }
+                
+                // 焦点不在输入框中，检查是否有文本内容
+                if (e.clipboardData.items) {
+                    for (let item of e.clipboardData.items) {
+                        if (item.type === 'text/plain') {
+                            item.getAsString(function(text) {
+                                if (text.trim()) {
+                                    e.preventDefault();
+                                    handlePastedText(text);
+                                }
+                            });
+                            return;
+                        }
+                    }
                 }
             });
             
@@ -813,8 +849,6 @@ class ExtendExpirationRequest(BaseModel):
 
 @app.put("/api/{cid}/extend", response_model=ClipboardResponse)
 async def extend_expiration(cid: str, request: ExtendExpirationRequest):
-    cleanup_expired()
-    
     add_hours = min(request.add_hours, MAX_STORAGE_HOURS)
     
     with get_db() as db:
@@ -822,9 +856,14 @@ async def extend_expiration(cid: str, request: ExtendExpirationRequest):
         db_item = db.execute(stmt).scalar_one_or_none()
         
         if db_item is None:
-            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+            raise HTTPException(status_code=404, detail="内容不存在")
         
-        db_item.expires_at = db_item.expires_at + timedelta(hours=add_hours)
+        current_time = datetime.now()
+        if db_item.expires_at < current_time:
+            db_item.expires_at = current_time + timedelta(hours=add_hours)
+        else:
+            db_item.expires_at = db_item.expires_at + timedelta(hours=add_hours)
+        
         db.commit()
         db.refresh(db_item)
         
