@@ -7,6 +7,10 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, select, delete
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from contextlib import contextmanager
 
 app = FastAPI(title="网络剪切板", description="临时存储文字和文件的网络剪切板")
 
@@ -15,13 +19,54 @@ MAX_STORAGE_HOURS = 24
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
+DB_HOST = "64.83.36.96"
+DB_PORT = 53306
+DB_USER = "mas5NrZGhvvFlLRwtnRh"
+DB_PASSWORD = "lsTiBCoLk3cWvQKMZ4Mq"
+DB_NAME = "cc"
+
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    echo=False
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+class ClipboardItem(Base):
+    __tablename__ = "clipboard_items"
+
+    id = Column(String(8), primary_key=True, index=True)
+    type = Column(String(10), nullable=False)
+    content = Column(Text, nullable=True)
+    filename = Column(String(255), nullable=True)
+    file_size = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    expires_at = Column(DateTime, nullable=False)
+
+
+@contextmanager
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+
+
 class ClipboardText(BaseModel):
     content: str
     expires_hours: int = 24
 
-class ClipboardUpdate(BaseModel):
-    content: Optional[str] = None
-    expires_hours: Optional[int] = None
 
 class ClipboardResponse(BaseModel):
     id: str
@@ -32,25 +77,37 @@ class ClipboardResponse(BaseModel):
     filename: Optional[str] = None
     file_size: Optional[int] = None
 
+
 storage: Dict[str, Dict[str, Any]] = {}
+
 
 def generate_id() -> str:
     return str(uuid.uuid4())[:8]
 
+
 def get_expiration_time(hours: int) -> datetime:
     return datetime.now() + timedelta(hours=min(hours, MAX_STORAGE_HOURS))
+
 
 def is_expired(item: Dict[str, Any]) -> bool:
     return datetime.now() > item["expires_at"]
 
+
 def cleanup_expired():
-    expired_ids = [cid for cid, item in storage.items() if is_expired(item)]
-    for cid in expired_ids:
-        item = storage.pop(cid, None)
-        if item and item["type"] == "file":
-            filepath = os.path.join(DATA_DIR, cid)
-            if os.path.exists(filepath):
-                os.remove(filepath)
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.expires_at < datetime.now())
+        expired_items = db.execute(stmt).scalars().all()
+        
+        for item in expired_items:
+            if item.type == "file":
+                filepath = os.path.join(DATA_DIR, item.id)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+        
+        delete_stmt = delete(ClipboardItem).where(ClipboardItem.expires_at < datetime.now())
+        db.execute(delete_stmt)
+        db.commit()
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -98,18 +155,6 @@ async def index():
             .retrieved-content.show { display: block; }
             .retrieved-text { background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
             .download-btn { display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin-top: 12px; }
-            .edit-mode { background: #fff3cd !important; }
-            .edit-actions { display: flex; gap: 12px; margin-top: 16px; }
-            .edit-actions button { flex: 1; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-            .btn-save { background: #667eea; color: white; }
-            .btn-cancel { background: #e0e0e0; color: #333; }
-            .btn-extend { background: #28a745; color: white; margin-left: 12px; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
-            .btn-edit { background: #ffc107; color: #333; margin-left: 12px; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
-            .paste-hint { background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center; color: #1a5276; }
-            .paste-hint kbd { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; font-family: monospace; }
-            .edit-textarea { width: 100%; min-height: 200px; padding: 16px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; resize: vertical; margin-bottom: 12px; }
-            .extend-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; align-items: center; gap: 12px; }
-            .extend-section select { flex: 1; max-width: 200px; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; }
         </style>
     </head>
     <body>
@@ -117,10 +162,6 @@ async def index():
             <h1>📋 网络剪切板</h1>
             
             <div class="card">
-                <div class="paste-hint">
-                    💡 提示：在页面任意位置按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 可直接粘贴文字或文件
-                </div>
-                
                 <div class="tab-container">
                     <button class="tab active" onclick="switchTab('text')">文本</button>
                     <button class="tab" onclick="switchTab('file')">文件</button>
@@ -129,7 +170,7 @@ async def index():
                 <div id="text-tab" class="tab-content active">
                     <div class="form-group">
                         <label>输入文本内容：</label>
-                        <textarea id="text-content" placeholder="在此输入要保存的文本，或直接按 Ctrl+V 粘贴..."></textarea>
+                        <textarea id="text-content" placeholder="在此输入要保存的文本..."></textarea>
                     </div>
                     <div class="form-group">
                         <label>保存时间：</label>
@@ -147,7 +188,6 @@ async def index():
                     <div class="form-group">
                         <label>选择文件：</label>
                         <input type="file" id="file-input">
-                        <p style="margin-top: 8px; color: #666; font-size: 14px;">或直接按 Ctrl+V 粘贴文件</p>
                     </div>
                     <div class="form-group">
                         <label>保存时间：</label>
@@ -183,45 +223,15 @@ async def index():
                 </div>
                 
                 <div id="retrieved-content" class="retrieved-content">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <h3 id="retrieved-type" style="color: #667eea; margin: 0;"></h3>
-                        <div>
-                            <button class="btn-edit" id="btn-edit" onclick="startEdit()" style="display: none;">✏️ 编辑</button>
-                            <button class="btn-extend" id="btn-extend" onclick="toggleExtend()">⏰ 延长有效期</button>
-                        </div>
-                    </div>
-                    <p style="margin-bottom: 12px; color: #666;"><strong>过期时间：</strong><span id="retrieved-expire"></span></p>
-                    
+                    <h3 id="retrieved-type" style="margin-bottom: 12px; color: #667eea;"></h3>
                     <div id="retrieved-text-container" style="display: none;">
                         <div class="retrieved-text" id="retrieved-text"></div>
-                        <div style="margin-top: 12px;">
-                            <button class="copy-btn" onclick="copyText()">复制文本</button>
-                        </div>
+                        <button class="copy-btn" onclick="copyText()">复制文本</button>
                     </div>
-                    
-                    <div id="edit-text-container" style="display: none;">
-                        <textarea id="edit-textarea" class="edit-textarea"></textarea>
-                        <div class="edit-actions">
-                            <button class="btn-cancel" onclick="cancelEdit()">取消</button>
-                            <button class="btn-save" onclick="saveEdit()">保存修改</button>
-                        </div>
-                    </div>
-                    
                     <div id="retrieved-file-container" style="display: none;">
                         <p style="margin-bottom: 8px;"><strong>文件名：</strong><span id="retrieved-filename"></span></p>
                         <p style="margin-bottom: 8px;"><strong>文件大小：</strong><span id="retrieved-size"></span></p>
                         <a class="download-btn" id="download-link" href="#" download>下载文件</a>
-                    </div>
-                    
-                    <div id="extend-section" class="extend-section" style="display: none;">
-                        <label style="margin: 0; white-space: nowrap;">延长：</label>
-                        <select id="extend-hours">
-                            <option value="1">1 小时</option>
-                            <option value="6">6 小时</option>
-                            <option value="12">12 小时</option>
-                            <option value="24">24 小时</option>
-                        </select>
-                        <button class="btn-extend" style="margin: 0;" onclick="extendExpire()">确认延长</button>
                     </div>
                 </div>
             </div>
@@ -317,28 +327,15 @@ async def index():
                 }
             }
             
-            let currentClipboardId = null;
-            let originalContent = '';
-            
             function showRetrieved(data, id) {
-                currentClipboardId = id;
-                originalContent = data.content || '';
-                
                 const container = document.getElementById('retrieved-content');
                 const textContainer = document.getElementById('retrieved-text-container');
                 const fileContainer = document.getElementById('retrieved-file-container');
-                const editContainer = document.getElementById('edit-text-container');
-                const extendSection = document.getElementById('extend-section');
-                const btnEdit = document.getElementById('btn-edit');
-                
-                document.getElementById('retrieved-expire').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
                 
                 if (data.type === 'text') {
                     document.getElementById('retrieved-type').textContent = '📝 文本内容';
                     document.getElementById('retrieved-text').textContent = data.content;
-                    btnEdit.style.display = 'inline-block';
                     textContainer.style.display = 'block';
-                    editContainer.style.display = 'none';
                     fileContainer.style.display = 'none';
                 } else {
                     document.getElementById('retrieved-type').textContent = '📁 文件内容';
@@ -346,100 +343,10 @@ async def index():
                     document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
                     document.getElementById('download-link').href = '/api/' + id + '/download';
                     document.getElementById('download-link').download = data.filename;
-                    btnEdit.style.display = 'none';
                     textContainer.style.display = 'none';
-                    editContainer.style.display = 'none';
                     fileContainer.style.display = 'block';
                 }
-                
-                extendSection.style.display = 'none';
                 container.classList.add('show');
-            }
-            
-            function startEdit() {
-                const textContainer = document.getElementById('retrieved-text-container');
-                const editContainer = document.getElementById('edit-text-container');
-                const currentText = document.getElementById('retrieved-text').textContent;
-                
-                document.getElementById('edit-textarea').value = currentText;
-                textContainer.style.display = 'none';
-                editContainer.style.display = 'block';
-                document.getElementById('retrieved-content').classList.add('edit-mode');
-            }
-            
-            function cancelEdit() {
-                const textContainer = document.getElementById('retrieved-text-container');
-                const editContainer = document.getElementById('edit-text-container');
-                
-                textContainer.style.display = 'block';
-                editContainer.style.display = 'none';
-                document.getElementById('retrieved-content').classList.remove('edit-mode');
-            }
-            
-            async function saveEdit() {
-                if (!currentClipboardId) return;
-                
-                const newContent = document.getElementById('edit-textarea').value;
-                
-                if (!newContent.trim()) {
-                    alert('内容不能为空');
-                    return;
-                }
-                
-                try {
-                    const response = await fetch('/api/' + currentClipboardId, {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({content: newContent})
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error('保存失败');
-                    }
-                    
-                    const data = await response.json();
-                    document.getElementById('retrieved-text').textContent = newContent;
-                    document.getElementById('retrieved-expire').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
-                    originalContent = newContent;
-                    cancelEdit();
-                    alert('修改成功！');
-                } catch (err) {
-                    alert('保存失败：' + err.message);
-                }
-            }
-            
-            function toggleExtend() {
-                const extendSection = document.getElementById('extend-section');
-                if (extendSection.style.display === 'none' || extendSection.style.display === '') {
-                    extendSection.style.display = 'flex';
-                } else {
-                    extendSection.style.display = 'none';
-                }
-            }
-            
-            async function extendExpire() {
-                if (!currentClipboardId) return;
-                
-                const hours = parseInt(document.getElementById('extend-hours').value);
-                
-                try {
-                    const response = await fetch('/api/' + currentClipboardId, {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({expires_hours: hours})
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error('延长失败');
-                    }
-                    
-                    const data = await response.json();
-                    document.getElementById('retrieved-expire').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
-                    toggleExtend();
-                    alert('有效期已延长！');
-                } catch (err) {
-                    alert('延长失败：' + err.message);
-                }
             }
             
             function formatSize(bytes) {
@@ -447,74 +354,12 @@ async def index():
                 if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
                 return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
             }
-            
-            document.addEventListener('DOMContentLoaded', function() {
-                document.addEventListener('paste', async function(e) {
-                    const items = e.clipboardData.items;
-                    
-                    for (let item of items) {
-                        if (item.type.indexOf('image') !== -1 || item.kind === 'file') {
-                            e.preventDefault();
-                            const file = item.getAsFile();
-                            if (file) {
-                                handlePastedFile(file);
-                            }
-                        } else if (item.type === 'text/plain') {
-                            item.getAsString(function(text) {
-                                if (text && text.trim()) {
-                                    const activeElement = document.activeElement;
-                                    const isTextInput = activeElement.tagName === 'TEXTAREA' || 
-                                                       (activeElement.tagName === 'INPUT' && activeElement.type === 'text');
-                                    
-                                    if (!isTextInput) {
-                                        e.preventDefault();
-                                        handlePastedText(text);
-                                    }
-                                }
-                            });
-                        }
-                    }
-                });
-            });
-            
-            function handlePastedText(text) {
-                switchTab('text');
-                document.getElementById('text-content').value = text;
-                document.getElementById('text-content').focus();
-                showPasteNotification('已粘贴文本到文本框');
-            }
-            
-            function handlePastedFile(file) {
-                switchTab('file');
-                
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                document.getElementById('file-input').files = dataTransfer.files;
-                
-                showPasteNotification('已粘贴文件：' + file.name);
-            }
-            
-            function showPasteNotification(message) {
-                const notification = document.createElement('div');
-                notification.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); ' +
-                    'background: #28a745; color: white; padding: 12px 24px; border-radius: 8px; ' +
-                    'z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2);';
-                notification.textContent = message;
-                document.body.appendChild(notification);
-                
-                setTimeout(function() {
-                    notification.style.opacity = '0';
-                    notification.style.transition = 'opacity 0.3s';
-                    setTimeout(function() {
-                        notification.remove();
-                    }, 300);
-                }, 2000);
-            }
         </script>
     </body>
     </html>
     """
     return HTMLResponse(content=html_content)
+
 
 @app.post("/api/text", response_model=ClipboardResponse)
 async def save_text(item: ClipboardText):
@@ -522,22 +367,27 @@ async def save_text(item: ClipboardText):
     
     cid = generate_id()
     expires_at = get_expiration_time(item.expires_hours)
+    created_at = datetime.now()
     
-    storage[cid] = {
-        "id": cid,
-        "type": "text",
-        "content": item.content,
-        "created_at": datetime.now(),
-        "expires_at": expires_at
-    }
+    with get_db() as db:
+        db_item = ClipboardItem(
+            id=cid,
+            type="text",
+            content=item.content,
+            created_at=created_at,
+            expires_at=expires_at
+        )
+        db.add(db_item)
+        db.commit()
     
     return ClipboardResponse(
         id=cid,
         type="text",
-        created_at=storage[cid]["created_at"],
+        created_at=created_at,
         expires_at=expires_at,
         content=item.content
     )
+
 
 @app.post("/api/file", response_model=ClipboardResponse)
 async def save_file(file: UploadFile = File(...), expires_hours: int = Form(24)):
@@ -545,6 +395,7 @@ async def save_file(file: UploadFile = File(...), expires_hours: int = Form(24))
     
     cid = generate_id()
     expires_at = get_expiration_time(expires_hours)
+    created_at = datetime.now()
     
     filepath = os.path.join(DATA_DIR, cid)
     file_content = await file.read()
@@ -552,123 +403,103 @@ async def save_file(file: UploadFile = File(...), expires_hours: int = Form(24))
     async with aiofiles.open(filepath, "wb") as f:
         await f.write(file_content)
     
-    storage[cid] = {
-        "id": cid,
-        "type": "file",
-        "filename": file.filename,
-        "file_size": len(file_content),
-        "created_at": datetime.now(),
-        "expires_at": expires_at
-    }
+    with get_db() as db:
+        db_item = ClipboardItem(
+            id=cid,
+            type="file",
+            filename=file.filename,
+            file_size=len(file_content),
+            created_at=created_at,
+            expires_at=expires_at
+        )
+        db.add(db_item)
+        db.commit()
     
     return ClipboardResponse(
         id=cid,
         type="file",
-        created_at=storage[cid]["created_at"],
+        created_at=created_at,
         expires_at=expires_at,
         filename=file.filename,
         file_size=len(file_content)
     )
 
+
 @app.get("/api/{cid}", response_model=ClipboardResponse)
 async def get_content(cid: str):
     cleanup_expired()
     
-    if cid not in storage:
-        raise HTTPException(status_code=404, detail="内容不存在或已过期")
-    
-    item = storage[cid]
-    
-    if item["type"] == "text":
-        return ClipboardResponse(
-            id=item["id"],
-            type="text",
-            created_at=item["created_at"],
-            expires_at=item["expires_at"],
-            content=item["content"]
-        )
-    else:
-        return ClipboardResponse(
-            id=item["id"],
-            type="file",
-            created_at=item["created_at"],
-            expires_at=item["expires_at"],
-            filename=item["filename"],
-            file_size=item["file_size"]
-        )
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        item = db.execute(stmt).scalar_one_or_none()
+        
+        if item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        if item.type == "text":
+            return ClipboardResponse(
+                id=item.id,
+                type="text",
+                created_at=item.created_at,
+                expires_at=item.expires_at,
+                content=item.content
+            )
+        else:
+            return ClipboardResponse(
+                id=item.id,
+                type="file",
+                created_at=item.created_at,
+                expires_at=item.expires_at,
+                filename=item.filename,
+                file_size=item.file_size
+            )
+
 
 @app.get("/api/{cid}/download")
 async def download_file(cid: str):
     cleanup_expired()
     
-    if cid not in storage:
-        raise HTTPException(status_code=404, detail="内容不存在或已过期")
-    
-    item = storage[cid]
-    
-    if item["type"] != "file":
-        raise HTTPException(status_code=400, detail="这不是文件类型")
-    
-    filepath = os.path.join(DATA_DIR, cid)
-    
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="文件已被删除")
-    
-    return FileResponse(
-        path=filepath,
-        filename=item["filename"]
-    )
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        item = db.execute(stmt).scalar_one_or_none()
+        
+        if item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        if item.type != "file":
+            raise HTTPException(status_code=400, detail="这不是文件类型")
+        
+        filepath = os.path.join(DATA_DIR, cid)
+        
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="文件已被删除")
+        
+        return FileResponse(
+            path=filepath,
+            filename=item.filename
+        )
 
-@app.put("/api/{cid}", response_model=ClipboardResponse)
-async def update_content(cid: str, update: ClipboardUpdate):
-    cleanup_expired()
-    
-    if cid not in storage:
-        raise HTTPException(status_code=404, detail="内容不存在或已过期")
-    
-    item = storage[cid]
-    
-    if update.content is not None:
-        if item["type"] != "text":
-            raise HTTPException(status_code=400, detail="文件类型内容不能编辑文本")
-        item["content"] = update.content
-    
-    if update.expires_hours is not None:
-        current_expires = item["expires_at"]
-        additional_hours = min(update.expires_hours, MAX_STORAGE_HOURS)
-        item["expires_at"] = current_expires + timedelta(hours=additional_hours)
-    
-    if item["type"] == "text":
-        return ClipboardResponse(
-            id=item["id"],
-            type="text",
-            created_at=item["created_at"],
-            expires_at=item["expires_at"],
-            content=item["content"]
-        )
-    else:
-        return ClipboardResponse(
-            id=item["id"],
-            type="file",
-            created_at=item["created_at"],
-            expires_at=item["expires_at"],
-            filename=item["filename"],
-            file_size=item["file_size"]
-        )
 
 @app.delete("/api/{cid}")
 async def delete_content(cid: str):
-    if cid not in storage:
-        raise HTTPException(status_code=404, detail="内容不存在或已过期")
-    
-    item = storage.pop(cid)
-    
-    if item["type"] == "file":
-        filepath = os.path.join(DATA_DIR, cid)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    
-    return {"message": "已删除"}
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        item = db.execute(stmt).scalar_one_or_none()
+        
+        if item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        delete_stmt = delete(ClipboardItem).where(ClipboardItem.id == cid)
+        db.execute(delete_stmt)
+        db.commit()
+        
+        if item.type == "file":
+            filepath = os.path.join(DATA_DIR, cid)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        
+        return {"message": "已删除"}
+
 
 def find_available_port(start_port: int = 3333, max_attempts: int = 10) -> int:
     import socket
@@ -682,8 +513,11 @@ def find_available_port(start_port: int = 3333, max_attempts: int = 10) -> int:
             continue
     return start_port
 
+
 if __name__ == "__main__":
     import uvicorn
+    
+    init_db()
     
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 3333))
