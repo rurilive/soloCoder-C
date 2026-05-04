@@ -19,6 +19,10 @@ class ClipboardText(BaseModel):
     content: str
     expires_hours: int = 24
 
+class ClipboardUpdate(BaseModel):
+    content: Optional[str] = None
+    expires_hours: Optional[int] = None
+
 class ClipboardResponse(BaseModel):
     id: str
     type: str
@@ -94,6 +98,18 @@ async def index():
             .retrieved-content.show { display: block; }
             .retrieved-text { background: white; padding: 12px; border-radius: 4px; margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
             .download-btn { display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin-top: 12px; }
+            .edit-mode { background: #fff3cd !important; }
+            .edit-actions { display: flex; gap: 12px; margin-top: 16px; }
+            .edit-actions button { flex: 1; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+            .btn-save { background: #667eea; color: white; }
+            .btn-cancel { background: #e0e0e0; color: #333; }
+            .btn-extend { background: #28a745; color: white; margin-left: 12px; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
+            .btn-edit { background: #ffc107; color: #333; margin-left: 12px; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
+            .paste-hint { background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center; color: #1a5276; }
+            .paste-hint kbd { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; font-family: monospace; }
+            .edit-textarea { width: 100%; min-height: 200px; padding: 16px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px; resize: vertical; margin-bottom: 12px; }
+            .extend-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; align-items: center; gap: 12px; }
+            .extend-section select { flex: 1; max-width: 200px; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; }
         </style>
     </head>
     <body>
@@ -101,6 +117,10 @@ async def index():
             <h1>📋 网络剪切板</h1>
             
             <div class="card">
+                <div class="paste-hint">
+                    💡 提示：在页面任意位置按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 可直接粘贴文字或文件
+                </div>
+                
                 <div class="tab-container">
                     <button class="tab active" onclick="switchTab('text')">文本</button>
                     <button class="tab" onclick="switchTab('file')">文件</button>
@@ -109,7 +129,7 @@ async def index():
                 <div id="text-tab" class="tab-content active">
                     <div class="form-group">
                         <label>输入文本内容：</label>
-                        <textarea id="text-content" placeholder="在此输入要保存的文本..."></textarea>
+                        <textarea id="text-content" placeholder="在此输入要保存的文本，或直接按 Ctrl+V 粘贴..."></textarea>
                     </div>
                     <div class="form-group">
                         <label>保存时间：</label>
@@ -127,6 +147,7 @@ async def index():
                     <div class="form-group">
                         <label>选择文件：</label>
                         <input type="file" id="file-input">
+                        <p style="margin-top: 8px; color: #666; font-size: 14px;">或直接按 Ctrl+V 粘贴文件</p>
                     </div>
                     <div class="form-group">
                         <label>保存时间：</label>
@@ -162,15 +183,45 @@ async def index():
                 </div>
                 
                 <div id="retrieved-content" class="retrieved-content">
-                    <h3 id="retrieved-type" style="margin-bottom: 12px; color: #667eea;"></h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h3 id="retrieved-type" style="color: #667eea; margin: 0;"></h3>
+                        <div>
+                            <button class="btn-edit" id="btn-edit" onclick="startEdit()" style="display: none;">✏️ 编辑</button>
+                            <button class="btn-extend" id="btn-extend" onclick="toggleExtend()">⏰ 延长有效期</button>
+                        </div>
+                    </div>
+                    <p style="margin-bottom: 12px; color: #666;"><strong>过期时间：</strong><span id="retrieved-expire"></span></p>
+                    
                     <div id="retrieved-text-container" style="display: none;">
                         <div class="retrieved-text" id="retrieved-text"></div>
-                        <button class="copy-btn" onclick="copyText()">复制文本</button>
+                        <div style="margin-top: 12px;">
+                            <button class="copy-btn" onclick="copyText()">复制文本</button>
+                        </div>
                     </div>
+                    
+                    <div id="edit-text-container" style="display: none;">
+                        <textarea id="edit-textarea" class="edit-textarea"></textarea>
+                        <div class="edit-actions">
+                            <button class="btn-cancel" onclick="cancelEdit()">取消</button>
+                            <button class="btn-save" onclick="saveEdit()">保存修改</button>
+                        </div>
+                    </div>
+                    
                     <div id="retrieved-file-container" style="display: none;">
                         <p style="margin-bottom: 8px;"><strong>文件名：</strong><span id="retrieved-filename"></span></p>
                         <p style="margin-bottom: 8px;"><strong>文件大小：</strong><span id="retrieved-size"></span></p>
                         <a class="download-btn" id="download-link" href="#" download>下载文件</a>
+                    </div>
+                    
+                    <div id="extend-section" class="extend-section" style="display: none;">
+                        <label style="margin: 0; white-space: nowrap;">延长：</label>
+                        <select id="extend-hours">
+                            <option value="1">1 小时</option>
+                            <option value="6">6 小时</option>
+                            <option value="12">12 小时</option>
+                            <option value="24">24 小时</option>
+                        </select>
+                        <button class="btn-extend" style="margin: 0;" onclick="extendExpire()">确认延长</button>
                     </div>
                 </div>
             </div>
@@ -266,15 +317,28 @@ async def index():
                 }
             }
             
+            let currentClipboardId = null;
+            let originalContent = '';
+            
             function showRetrieved(data, id) {
+                currentClipboardId = id;
+                originalContent = data.content || '';
+                
                 const container = document.getElementById('retrieved-content');
                 const textContainer = document.getElementById('retrieved-text-container');
                 const fileContainer = document.getElementById('retrieved-file-container');
+                const editContainer = document.getElementById('edit-text-container');
+                const extendSection = document.getElementById('extend-section');
+                const btnEdit = document.getElementById('btn-edit');
+                
+                document.getElementById('retrieved-expire').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
                 
                 if (data.type === 'text') {
                     document.getElementById('retrieved-type').textContent = '📝 文本内容';
                     document.getElementById('retrieved-text').textContent = data.content;
+                    btnEdit.style.display = 'inline-block';
                     textContainer.style.display = 'block';
+                    editContainer.style.display = 'none';
                     fileContainer.style.display = 'none';
                 } else {
                     document.getElementById('retrieved-type').textContent = '📁 文件内容';
@@ -282,16 +346,169 @@ async def index():
                     document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
                     document.getElementById('download-link').href = '/api/' + id + '/download';
                     document.getElementById('download-link').download = data.filename;
+                    btnEdit.style.display = 'none';
                     textContainer.style.display = 'none';
+                    editContainer.style.display = 'none';
                     fileContainer.style.display = 'block';
                 }
+                
+                extendSection.style.display = 'none';
                 container.classList.add('show');
+            }
+            
+            function startEdit() {
+                const textContainer = document.getElementById('retrieved-text-container');
+                const editContainer = document.getElementById('edit-text-container');
+                const currentText = document.getElementById('retrieved-text').textContent;
+                
+                document.getElementById('edit-textarea').value = currentText;
+                textContainer.style.display = 'none';
+                editContainer.style.display = 'block';
+                document.getElementById('retrieved-content').classList.add('edit-mode');
+            }
+            
+            function cancelEdit() {
+                const textContainer = document.getElementById('retrieved-text-container');
+                const editContainer = document.getElementById('edit-text-container');
+                
+                textContainer.style.display = 'block';
+                editContainer.style.display = 'none';
+                document.getElementById('retrieved-content').classList.remove('edit-mode');
+            }
+            
+            async function saveEdit() {
+                if (!currentClipboardId) return;
+                
+                const newContent = document.getElementById('edit-textarea').value;
+                
+                if (!newContent.trim()) {
+                    alert('内容不能为空');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/api/' + currentClipboardId, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({content: newContent})
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('保存失败');
+                    }
+                    
+                    const data = await response.json();
+                    document.getElementById('retrieved-text').textContent = newContent;
+                    document.getElementById('retrieved-expire').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
+                    originalContent = newContent;
+                    cancelEdit();
+                    alert('修改成功！');
+                } catch (err) {
+                    alert('保存失败：' + err.message);
+                }
+            }
+            
+            function toggleExtend() {
+                const extendSection = document.getElementById('extend-section');
+                if (extendSection.style.display === 'none' || extendSection.style.display === '') {
+                    extendSection.style.display = 'flex';
+                } else {
+                    extendSection.style.display = 'none';
+                }
+            }
+            
+            async function extendExpire() {
+                if (!currentClipboardId) return;
+                
+                const hours = parseInt(document.getElementById('extend-hours').value);
+                
+                try {
+                    const response = await fetch('/api/' + currentClipboardId, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({expires_hours: hours})
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('延长失败');
+                    }
+                    
+                    const data = await response.json();
+                    document.getElementById('retrieved-expire').textContent = new Date(data.expires_at).toLocaleString('zh-CN');
+                    toggleExtend();
+                    alert('有效期已延长！');
+                } catch (err) {
+                    alert('延长失败：' + err.message);
+                }
             }
             
             function formatSize(bytes) {
                 if (bytes < 1024) return bytes + ' B';
                 if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
                 return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            }
+            
+            document.addEventListener('DOMContentLoaded', function() {
+                document.addEventListener('paste', async function(e) {
+                    const items = e.clipboardData.items;
+                    
+                    for (let item of items) {
+                        if (item.type.indexOf('image') !== -1 || item.kind === 'file') {
+                            e.preventDefault();
+                            const file = item.getAsFile();
+                            if (file) {
+                                handlePastedFile(file);
+                            }
+                        } else if (item.type === 'text/plain') {
+                            item.getAsString(function(text) {
+                                if (text && text.trim()) {
+                                    const activeElement = document.activeElement;
+                                    const isTextInput = activeElement.tagName === 'TEXTAREA' || 
+                                                       (activeElement.tagName === 'INPUT' && activeElement.type === 'text');
+                                    
+                                    if (!isTextInput) {
+                                        e.preventDefault();
+                                        handlePastedText(text);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                });
+            });
+            
+            function handlePastedText(text) {
+                switchTab('text');
+                document.getElementById('text-content').value = text;
+                document.getElementById('text-content').focus();
+                showPasteNotification('已粘贴文本到文本框');
+            }
+            
+            function handlePastedFile(file) {
+                switchTab('file');
+                
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                document.getElementById('file-input').files = dataTransfer.files;
+                
+                showPasteNotification('已粘贴文件：' + file.name);
+            }
+            
+            function showPasteNotification(message) {
+                const notification = document.createElement('div');
+                notification.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); ' +
+                    'background: #28a745; color: white; padding: 12px 24px; border-radius: 8px; ' +
+                    'z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2);';
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                
+                setTimeout(function() {
+                    notification.style.opacity = '0';
+                    notification.style.transition = 'opacity 0.3s';
+                    setTimeout(function() {
+                        notification.remove();
+                    }, 300);
+                }, 2000);
             }
         </script>
     </body>
@@ -401,6 +618,43 @@ async def download_file(cid: str):
         path=filepath,
         filename=item["filename"]
     )
+
+@app.put("/api/{cid}", response_model=ClipboardResponse)
+async def update_content(cid: str, update: ClipboardUpdate):
+    cleanup_expired()
+    
+    if cid not in storage:
+        raise HTTPException(status_code=404, detail="内容不存在或已过期")
+    
+    item = storage[cid]
+    
+    if update.content is not None:
+        if item["type"] != "text":
+            raise HTTPException(status_code=400, detail="文件类型内容不能编辑文本")
+        item["content"] = update.content
+    
+    if update.expires_hours is not None:
+        current_expires = item["expires_at"]
+        additional_hours = min(update.expires_hours, MAX_STORAGE_HOURS)
+        item["expires_at"] = current_expires + timedelta(hours=additional_hours)
+    
+    if item["type"] == "text":
+        return ClipboardResponse(
+            id=item["id"],
+            type="text",
+            created_at=item["created_at"],
+            expires_at=item["expires_at"],
+            content=item["content"]
+        )
+    else:
+        return ClipboardResponse(
+            id=item["id"],
+            type="file",
+            created_at=item["created_at"],
+            expires_at=item["expires_at"],
+            filename=item["filename"],
+            file_size=item["file_size"]
+        )
 
 @app.delete("/api/{cid}")
 async def delete_content(cid: str):
