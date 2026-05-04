@@ -416,6 +416,31 @@ async def delete_content(cid: str):
     
     return {"message": "已删除"}
 
+def find_available_port(start_port: int = 3333, max_attempts: int = 10) -> int:
+    import socket
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+                return port
+        except OSError:
+            continue
+    return start_port
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3333)
+    
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 3333))
+    
+    try:
+        uvicorn.run(app, host=host, port=port)
+    except OSError as e:
+        if "address already in use" in str(e).lower():
+            print(f"端口 {port} 已被占用，正在查找可用端口...")
+            available_port = find_available_port(port + 1)
+            print(f"使用端口 {available_port} 启动服务...")
+            uvicorn.run(app, host=host, port=available_port)
+        else:
+            raise
