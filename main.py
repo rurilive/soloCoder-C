@@ -1,10 +1,12 @@
 import os
 import uuid
+import zipfile
+import io
 import aiofiles
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, select, delete
@@ -50,9 +52,22 @@ class ClipboardItem(Base):
     content = Column(Text, nullable=True)
     filename = Column(String(255), nullable=True)
     file_size = Column(Integer, nullable=True)
+    file_count = Column(Integer, nullable=True, default=1)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
     expires_at = Column(DateTime, nullable=False)
+
+
+class ClipboardFile(Base):
+    __tablename__ = "clipboard_files"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    item_id = Column(String(8), nullable=False, index=True)
+    filename = Column(String(512), nullable=False)
+    original_path = Column(String(1024), nullable=True)
+    file_size = Column(Integer, nullable=False)
+    stored_filename = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
 
 
 @contextmanager
@@ -77,6 +92,14 @@ class ClipboardText(BaseModel):
     expires_hours: int = 24
 
 
+class ClipboardFileResponse(BaseModel):
+    id: int
+    filename: str
+    original_path: Optional[str] = None
+    file_size: int
+    stored_filename: str
+
+
 class ClipboardResponse(BaseModel):
     id: str
     type: str
@@ -86,6 +109,8 @@ class ClipboardResponse(BaseModel):
     content: Optional[str] = None
     filename: Optional[str] = None
     file_size: Optional[int] = None
+    file_count: Optional[int] = None
+    files: Optional[list[ClipboardFileResponse]] = None
 
 
 storage: Dict[str, Dict[str, Any]] = {}
@@ -93,6 +118,10 @@ storage: Dict[str, Dict[str, Any]] = {}
 
 def generate_id() -> str:
     return str(uuid.uuid4())[:8]
+
+
+def generate_stored_filename() -> str:
+    return str(uuid.uuid4())
 
 
 def get_expiration_time(hours: int) -> datetime:
@@ -110,9 +139,20 @@ def cleanup_expired():
         
         for item in expired_items:
             if item.type == "file":
-                filepath = os.path.join(DATA_DIR, item.id)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
+                file_stmt = select(ClipboardFile).where(ClipboardFile.item_id == item.id)
+                files = db.execute(file_stmt).scalars().all()
+                
+                for file_record in files:
+                    filepath = os.path.join(DATA_DIR, file_record.stored_filename)
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                
+                delete_files_stmt = delete(ClipboardFile).where(ClipboardFile.item_id == item.id)
+                db.execute(delete_files_stmt)
+                
+                old_filepath = os.path.join(DATA_DIR, item.id)
+                if os.path.exists(old_filepath):
+                    os.remove(old_filepath)
         
         delete_stmt = delete(ClipboardItem).where(ClipboardItem.expires_at < datetime.now())
         db.execute(delete_stmt)
@@ -185,6 +225,23 @@ async def index():
             .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 8px; background: white; border-radius: 4px; }
             .info-row label { margin-bottom: 0; color: #666; font-weight: normal; }
             .info-row span { font-family: monospace; color: #333; }
+            .file-list { margin-top: 12px; padding: 12px; background: #f8f9fa; border-radius: 8px; max-height: 300px; overflow-y: auto; }
+            .file-list-title { font-weight: 600; margin-bottom: 8px; color: #333; }
+            .file-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border-radius: 6px; margin-bottom: 6px; border: 1px solid #e0e0e0; }
+            .file-item:hover { background: #f0f4ff; }
+            .file-item-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+            .file-icon { font-size: 20px; }
+            .file-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+            .file-size { color: #666; font-size: 12px; margin-left: 8px; }
+            .file-download-btn { padding: 4px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+            .file-download-btn:hover { background: #5a67d8; }
+            .upload-section { display: flex; gap: 12px; flex-wrap: wrap; }
+            .upload-btn { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+            .upload-btn:hover { background: #5a67d8; }
+            .upload-btn.secondary { background: #6c757d; }
+            .upload-btn.secondary:hover { background: #5a6268; }
+            .file-count-badge { display: inline-block; padding: 2px 8px; background: #667eea; color: white; border-radius: 12px; font-size: 12px; margin-left: 8px; }
+            .empty-list { text-align: center; padding: 20px; color: #666; }
         </style>
     </head>
     <body>
@@ -220,8 +277,17 @@ async def index():
                 
                 <div id="file-tab" class="tab-content">
                     <div class="form-group">
-                        <label>选择文件：</label>
-                        <input type="file" id="file-input">
+                        <label>选择文件或文件夹：</label>
+                        <div class="upload-section">
+                            <input type="file" id="file-input" multiple style="display: none;">
+                            <input type="file" id="folder-input" webkitdirectory multiple style="display: none;">
+                            <button type="button" class="upload-btn" onclick="document.getElementById('file-input').click()">📁 选择文件</button>
+                            <button type="button" class="upload-btn secondary" onclick="document.getElementById('folder-input').click()">📂 选择文件夹</button>
+                        </div>
+                    </div>
+                    <div id="selected-files-list" class="file-list" style="display: none;">
+                        <div class="file-list-title">已选择的文件 <span id="selected-file-count" class="file-count-badge">0</span></div>
+                        <div id="selected-files-container"></div>
                     </div>
                     <div class="form-group">
                         <label>保存时间：</label>
@@ -290,17 +356,40 @@ async def index():
                     </div>
                     
                     <div id="retrieved-file-container" style="display: none;">
-                        <p style="margin-bottom: 8px;"><strong>文件名：</strong><span id="retrieved-filename"></span></p>
-                        <p style="margin-bottom: 8px;"><strong>文件大小：</strong><span id="retrieved-size"></span></p>
-                        <div class="action-buttons">
-                            <a class="download-btn" id="download-link" href="#" download>下载文件</a>
-                            <button class="btn-secondary btn-warning" onclick="startEditFile()">更换文件</button>
+                        <div id="single-file-info" style="display: none;">
+                            <p style="margin-bottom: 8px;"><strong>文件名：</strong><span id="retrieved-filename"></span></p>
+                            <p style="margin-bottom: 8px;"><strong>文件大小：</strong><span id="retrieved-size"></span></p>
+                            <div class="action-buttons">
+                                <a class="download-btn" id="download-link" href="#" download>下载文件</a>
+                                <button class="btn-secondary btn-warning" onclick="startEditFile()">更换文件</button>
+                            </div>
+                        </div>
+                        <div id="multi-file-info" style="display: none;">
+                            <p style="margin-bottom: 8px;"><strong>文件数量：</strong><span id="retrieved-file-count"></span> 个文件</p>
+                            <p style="margin-bottom: 8px;"><strong>总大小：</strong><span id="retrieved-total-size"></span></p>
+                            <div class="action-buttons">
+                                <a class="download-btn" id="download-all-link" href="#" download>下载全部 (ZIP)</a>
+                                <button class="btn-secondary btn-warning" onclick="startEditFile()">更换文件</button>
+                            </div>
+                            <div id="retrieved-files-list" class="file-list">
+                                <div class="file-list-title">文件列表</div>
+                                <div id="retrieved-files-container"></div>
+                            </div>
                         </div>
                         
                         <div id="edit-file-mode" class="edit-mode">
                             <label>选择新文件：</label>
-                            <input type="file" id="edit-file-input" class="edit-file-input">
-                            <div class="action-buttons">
+                            <div class="upload-section" style="margin-top: 8px;">
+                                <input type="file" id="edit-file-input" multiple style="display: none;">
+                                <input type="file" id="edit-folder-input" webkitdirectory multiple style="display: none;">
+                                <button type="button" class="upload-btn" onclick="document.getElementById('edit-file-input').click()">📁 选择文件</button>
+                                <button type="button" class="upload-btn secondary" onclick="document.getElementById('edit-folder-input').click()">📂 选择文件夹</button>
+                            </div>
+                            <div id="edit-selected-files-list" class="file-list" style="display: none; margin-top: 12px;">
+                                <div class="file-list-title">已选择的文件 <span id="edit-selected-file-count" class="file-count-badge">0</span></div>
+                                <div id="edit-selected-files-container"></div>
+                            </div>
+                            <div class="action-buttons" style="margin-top: 12px;">
                                 <button class="btn-secondary btn-success" onclick="saveEditFile()">保存修改</button>
                                 <button class="btn-secondary" onclick="cancelEditFile()">取消</button>
                             </div>
@@ -326,6 +415,8 @@ async def index():
         <script>
             let currentRetrievedId = null;
             let currentRetrievedData = null;
+            let selectedFiles = [];
+            let editSelectedFiles = [];
             
             function switchTab(type) {
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -334,41 +425,151 @@ async def index():
                 document.getElementById(type + '-tab').classList.add('active');
             }
             
+            function getFileIcon(filename) {
+                const ext = filename.split('.').pop().toLowerCase();
+                const icons = {
+                    'pdf': '📄',
+                    'doc': '📝', 'docx': '📝',
+                    'xls': '📊', 'xlsx': '📊',
+                    'ppt': '📽️', 'pptx': '📽️',
+                    'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'bmp': '🖼️', 'webp': '🖼️',
+                    'zip': '📦', 'rar': '📦', '7z': '📦',
+                    'mp3': '🎵', 'wav': '🎵', 'flac': '🎵',
+                    'mp4': '🎬', 'avi': '🎬', 'mov': '🎬',
+                    'txt': '📃', 'json': '📃', 'xml': '📃', 'html': '📃', 'css': '📃', 'js': '📃',
+                    'py': '🐍', 'java': '☕', 'cpp': '⚡', 'c': '⚡', 'go': '🐹', 'rs': '🦀'
+                };
+                return icons[ext] || '📁';
+            }
+            
+            function renderFileList(files, containerId, countId, listId) {
+                const container = document.getElementById(containerId);
+                const countSpan = document.getElementById(countId);
+                const listDiv = document.getElementById(listId);
+                
+                if (files.length === 0) {
+                    listDiv.style.display = 'none';
+                    return;
+                }
+                
+                countSpan.textContent = files.length;
+                listDiv.style.display = 'block';
+                
+                let html = '';
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const icon = getFileIcon(file.name);
+                    const size = formatSize(file.size);
+                    html += `
+                        <div class="file-item">
+                            <div class="file-item-info">
+                                <span class="file-icon">${icon}</span>
+                                <span class="file-name">${file.name}</span>
+                                <span class="file-size">${size}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            }
+            
+            function renderRetrievedFileList(files, itemId) {
+                const container = document.getElementById('retrieved-files-container');
+                
+                if (!files || files.length === 0) {
+                    container.innerHTML = '<div class="empty-list">暂无文件</div>';
+                    return;
+                }
+                
+                let html = '';
+                for (let file of files) {
+                    const icon = getFileIcon(file.filename);
+                    const size = formatSize(file.file_size);
+                    const downloadUrl = `/api/${itemId}/file/${file.id}/download`;
+                    html += `
+                        <div class="file-item">
+                            <div class="file-item-info">
+                                <span class="file-icon">${icon}</span>
+                                <span class="file-name">${file.filename}</span>
+                                <span class="file-size">${size}</span>
+                            </div>
+                            <button class="file-download-btn" onclick="window.open('${downloadUrl}', '_blank')">下载</button>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            }
+            
+            document.addEventListener('DOMContentLoaded', function() {
+                const fileInput = document.getElementById('file-input');
+                const folderInput = document.getElementById('folder-input');
+                const editFileInput = document.getElementById('edit-file-input');
+                const editFolderInput = document.getElementById('edit-folder-input');
+                
+                function handleFileSelection(input, isEdit = false) {
+                    const files = Array.from(input.files);
+                    if (isEdit) {
+                        editSelectedFiles = files;
+                        renderFileList(files, 'edit-selected-files-container', 'edit-selected-file-count', 'edit-selected-files-list');
+                    } else {
+                        selectedFiles = files;
+                        renderFileList(files, 'selected-files-container', 'selected-file-count', 'selected-files-list');
+                    }
+                }
+                
+                if (fileInput) {
+                    fileInput.addEventListener('change', function() {
+                        handleFileSelection(this, false);
+                    });
+                }
+                
+                if (folderInput) {
+                    folderInput.addEventListener('change', function() {
+                        handleFileSelection(this, false);
+                    });
+                }
+                
+                if (editFileInput) {
+                    editFileInput.addEventListener('change', function() {
+                        handleFileSelection(this, true);
+                    });
+                }
+                
+                if (editFolderInput) {
+                    editFolderInput.addEventListener('change', function() {
+                        handleFileSelection(this, true);
+                    });
+                }
+            });
+            
             document.addEventListener('paste', async function(e) {
                 const pasteHint = document.getElementById('paste-hint');
                 pasteHint.classList.add('active');
                 setTimeout(() => pasteHint.classList.remove('active'), 1000);
                 
-                // 检查是否有文件被粘贴
-                let hasFile = false;
-                let fileToPaste = null;
+                let pastedFiles = [];
                 
-                // 方式1: 检查 clipboardData.files
                 if (e.clipboardData.files && e.clipboardData.files.length > 0) {
-                    hasFile = true;
-                    fileToPaste = e.clipboardData.files[0];
+                    pastedFiles = Array.from(e.clipboardData.files);
                 }
                 
-                // 方式2: 检查 items 中的 file 类型
-                if (!hasFile && e.clipboardData.items) {
+                if (pastedFiles.length === 0 && e.clipboardData.items) {
                     for (let item of e.clipboardData.items) {
                         if (item.kind === 'file') {
-                            hasFile = true;
-                            fileToPaste = item.getAsFile();
-                            break;
+                            const file = item.getAsFile();
+                            if (file) {
+                                pastedFiles.push(file);
+                            }
                         }
                     }
                 }
                 
-                if (hasFile && fileToPaste) {
-                    // 粘贴的是文件，阻止默认行为并处理
+                if (pastedFiles.length > 0) {
                     e.preventDefault();
-                    handlePastedFile(fileToPaste);
+                    handlePastedFiles(pastedFiles);
                     return;
                 }
                 
-                // 粘贴的是文本
-                // 检查焦点是否在文本输入框中
                 const activeElement = document.activeElement;
                 const isFocusedOnInput = activeElement && (
                     activeElement.tagName === 'TEXTAREA' || 
@@ -376,11 +577,9 @@ async def index():
                 );
                 
                 if (isFocusedOnInput) {
-                    // 焦点在输入框中，不阻止默认行为，让浏览器正常处理粘贴
                     return;
                 }
                 
-                // 焦点不在输入框中，检查是否有文本内容
                 if (e.clipboardData.items) {
                     for (let item of e.clipboardData.items) {
                         if (item.type === 'text/plain') {
@@ -405,11 +604,10 @@ async def index():
                 document.getElementById('file-tab').classList.remove('active');
             }
             
-            function handlePastedFile(file) {
+            function handlePastedFiles(files) {
                 switchTab('file');
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                document.getElementById('file-input').files = dataTransfer.files;
+                selectedFiles = files;
+                renderFileList(files, 'selected-files-container', 'selected-file-count', 'selected-files-list');
                 document.querySelectorAll('.tab')[1].classList.add('active');
                 document.querySelectorAll('.tab')[0].classList.remove('active');
                 document.getElementById('file-tab').classList.add('active');
@@ -439,16 +637,17 @@ async def index():
             }
             
             async function saveFile() {
-                const fileInput = document.getElementById('file-input');
                 const expire = parseInt(document.getElementById('file-expire').value);
                 
-                if (!fileInput.files.length) {
+                if (selectedFiles.length === 0) {
                     alert('请选择文件');
                     return;
                 }
                 
                 const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
+                for (let file of selectedFiles) {
+                    formData.append('files', file);
+                }
                 formData.append('expires_hours', expire);
                 
                 try {
@@ -517,13 +716,30 @@ async def index():
                     document.getElementById('edit-text-mode').classList.remove('active');
                 } else {
                     document.getElementById('retrieved-type').textContent = '📁 文件内容';
-                    document.getElementById('retrieved-filename').textContent = data.filename;
-                    document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
-                    document.getElementById('download-link').href = '/api/' + id + '/download';
-                    document.getElementById('download-link').download = data.filename;
+                    
+                    const isMultiFile = data.file_count && data.file_count > 1;
+                    
+                    if (isMultiFile) {
+                        document.getElementById('single-file-info').style.display = 'none';
+                        document.getElementById('multi-file-info').style.display = 'block';
+                        document.getElementById('retrieved-file-count').textContent = data.file_count;
+                        document.getElementById('retrieved-total-size').textContent = formatSize(data.file_size);
+                        document.getElementById('download-all-link').href = '/api/' + id + '/download';
+                        document.getElementById('download-all-link').download = id + '.zip';
+                        renderRetrievedFileList(data.files, id);
+                    } else {
+                        document.getElementById('single-file-info').style.display = 'block';
+                        document.getElementById('multi-file-info').style.display = 'none';
+                        document.getElementById('retrieved-filename').textContent = data.filename;
+                        document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
+                        document.getElementById('download-link').href = '/api/' + id + '/download';
+                        document.getElementById('download-link').download = data.filename;
+                    }
+                    
                     textContainer.style.display = 'none';
                     fileContainer.style.display = 'block';
                     document.getElementById('edit-file-mode').classList.remove('active');
+                    editSelectedFiles = [];
                 }
                 container.classList.add('show');
             }
@@ -572,25 +788,28 @@ async def index():
             
             function startEditFile() {
                 if (!currentRetrievedId) return;
-                document.getElementById('edit-file-input').value = '';
+                editSelectedFiles = [];
+                document.getElementById('edit-selected-files-list').style.display = 'none';
                 document.getElementById('edit-file-mode').classList.add('active');
             }
             
             function cancelEditFile() {
                 document.getElementById('edit-file-mode').classList.remove('active');
+                editSelectedFiles = [];
             }
             
             async function saveEditFile() {
                 if (!currentRetrievedId) return;
-                const fileInput = document.getElementById('edit-file-input');
                 
-                if (!fileInput.files.length) {
+                if (editSelectedFiles.length === 0) {
                     alert('请选择文件');
                     return;
                 }
                 
                 const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
+                for (let file of editSelectedFiles) {
+                    formData.append('files', file);
+                }
                 
                 try {
                     const response = await fetch('/api/' + currentRetrievedId + '/file', {
@@ -604,11 +823,23 @@ async def index():
                     
                     const data = await response.json();
                     currentRetrievedData = data;
-                    document.getElementById('retrieved-filename').textContent = data.filename;
-                    document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
+                    
+                    const isMultiFile = data.file_count && data.file_count > 1;
+                    
+                    if (isMultiFile) {
+                        document.getElementById('single-file-info').style.display = 'none';
+                        document.getElementById('multi-file-info').style.display = 'block';
+                        document.getElementById('retrieved-file-count').textContent = data.file_count;
+                        document.getElementById('retrieved-total-size').textContent = formatSize(data.file_size);
+                        renderRetrievedFileList(data.files, currentRetrievedId);
+                    } else {
+                        document.getElementById('single-file-info').style.display = 'block';
+                        document.getElementById('multi-file-info').style.display = 'none';
+                        document.getElementById('retrieved-filename').textContent = data.filename;
+                        document.getElementById('retrieved-size').textContent = formatSize(data.file_size);
+                    }
+                    
                     document.getElementById('retrieved-updated').textContent = new Date(data.updated_at).toLocaleString('zh-CN');
-                    document.getElementById('download-link').href = '/api/' + currentRetrievedId + '/download';
-                    document.getElementById('download-link').download = data.filename;
                     document.getElementById('edit-file-mode').classList.remove('active');
                     alert('✅ 文件更新成功！');
                 } catch (err) {
@@ -682,30 +913,69 @@ async def save_text(item: ClipboardText):
 
 
 @app.post("/api/file", response_model=ClipboardResponse)
-async def save_file(file: UploadFile = File(...), expires_hours: int = Form(24)):
+async def save_file(files: list[UploadFile] = File(...), expires_hours: int = Form(24)):
     cleanup_expired()
+    
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail="请至少选择一个文件")
     
     cid = generate_id()
     expires_at = get_expiration_time(expires_hours)
     created_at = datetime.now()
     
-    filepath = os.path.join(DATA_DIR, cid)
-    file_content = await file.read()
-    
-    async with aiofiles.open(filepath, "wb") as f:
-        await f.write(file_content)
+    total_size = 0
+    first_filename = None
+    file_records = []
     
     with get_db() as db:
+        for file in files:
+            stored_filename = generate_stored_filename()
+            filepath = os.path.join(DATA_DIR, stored_filename)
+            file_content = await file.read()
+            
+            async with aiofiles.open(filepath, "wb") as f:
+                await f.write(file_content)
+            
+            total_size += len(file_content)
+            if first_filename is None:
+                first_filename = file.filename
+            
+            file_record = ClipboardFile(
+                item_id=cid,
+                filename=file.filename or "unknown",
+                original_path=None,
+                file_size=len(file_content),
+                stored_filename=stored_filename,
+                created_at=created_at
+            )
+            file_records.append(file_record)
+        
         db_item = ClipboardItem(
             id=cid,
             type="file",
-            filename=file.filename,
-            file_size=len(file_content),
+            filename=first_filename,
+            file_size=total_size,
+            file_count=len(files),
             created_at=created_at,
             expires_at=expires_at
         )
         db.add(db_item)
+        
+        for fr in file_records:
+            db.add(fr)
+        
         db.commit()
+        db.refresh(db_item)
+        
+        response_files = []
+        for fr in file_records:
+            response_files.append(ClipboardFileResponse(
+                id=fr.id,
+                filename=fr.filename,
+                original_path=fr.original_path,
+                file_size=fr.file_size,
+                stored_filename=fr.stored_filename
+            ))
     
     return ClipboardResponse(
         id=cid,
@@ -713,8 +983,10 @@ async def save_file(file: UploadFile = File(...), expires_hours: int = Form(24))
         created_at=created_at,
         updated_at=created_at,
         expires_at=expires_at,
-        filename=file.filename,
-        file_size=len(file_content)
+        filename=first_filename,
+        file_size=total_size,
+        file_count=len(files),
+        files=response_files
     )
 
 
@@ -739,14 +1011,29 @@ async def get_content(cid: str):
                 content=item.content
             )
         else:
+            file_stmt = select(ClipboardFile).where(ClipboardFile.item_id == item.id)
+            files = db.execute(file_stmt).scalars().all()
+            
+            response_files = []
+            for f in files:
+                response_files.append(ClipboardFileResponse(
+                    id=f.id,
+                    filename=f.filename,
+                    original_path=f.original_path,
+                    file_size=f.file_size,
+                    stored_filename=f.stored_filename
+                ))
+            
             return ClipboardResponse(
                 id=item.id,
-                type="file",
+                type=item.type,
                 created_at=item.created_at,
                 updated_at=item.updated_at,
                 expires_at=item.expires_at,
                 filename=item.filename,
-                file_size=item.file_size
+                file_size=item.file_size,
+                file_count=item.file_count,
+                files=response_files if response_files else None
             )
 
 
@@ -764,14 +1051,71 @@ async def download_file(cid: str):
         if item.type != "file":
             raise HTTPException(status_code=400, detail="这不是文件类型")
         
-        filepath = os.path.join(DATA_DIR, cid)
+        file_stmt = select(ClipboardFile).where(ClipboardFile.item_id == item.id)
+        files = db.execute(file_stmt).scalars().all()
         
+        if not files:
+            old_filepath = os.path.join(DATA_DIR, cid)
+            if os.path.exists(old_filepath):
+                return FileResponse(
+                    path=old_filepath,
+                    filename=item.filename or "download"
+                )
+            raise HTTPException(status_code=404, detail="文件已被删除")
+        
+        if len(files) == 1:
+            file_record = files[0]
+            filepath = os.path.join(DATA_DIR, file_record.stored_filename)
+            if not os.path.exists(filepath):
+                raise HTTPException(status_code=404, detail="文件已被删除")
+            return FileResponse(
+                path=filepath,
+                filename=file_record.filename
+            )
+        else:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_record in files:
+                    filepath = os.path.join(DATA_DIR, file_record.stored_filename)
+                    if os.path.exists(filepath):
+                        arcname = file_record.original_path or file_record.filename
+                        zipf.write(filepath, arcname)
+            
+            zip_buffer.seek(0)
+            return StreamingResponse(
+                zip_buffer,
+                media_type="application/zip",
+                headers={"Content-Disposition": f"attachment; filename={item.id}.zip"}
+            )
+
+
+@app.get("/api/{cid}/file/{file_id}/download")
+async def download_single_file(cid: str, file_id: int):
+    cleanup_expired()
+    
+    with get_db() as db:
+        stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
+        item = db.execute(stmt).scalar_one_or_none()
+        
+        if item is None:
+            raise HTTPException(status_code=404, detail="内容不存在或已过期")
+        
+        file_stmt = select(ClipboardFile).where(
+            ClipboardFile.id == file_id,
+            ClipboardFile.item_id == cid
+        )
+        file_record = db.execute(file_stmt).scalar_one_or_none()
+        
+        if file_record is None:
+            raise HTTPException(status_code=404, detail="文件不存在")
+        
+        filepath = os.path.join(DATA_DIR, file_record.stored_filename)
         if not os.path.exists(filepath):
             raise HTTPException(status_code=404, detail="文件已被删除")
         
         return FileResponse(
             path=filepath,
-            filename=item.filename
+            filename=file_record.filename
         )
 
 
@@ -808,8 +1152,11 @@ async def update_text(cid: str, item: UpdateTextRequest):
 
 
 @app.put("/api/{cid}/file", response_model=ClipboardResponse)
-async def update_file(cid: str, file: UploadFile = File(...)):
+async def update_file(cid: str, files: list[UploadFile] = File(...)):
     cleanup_expired()
+    
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail="请至少选择一个文件")
     
     with get_db() as db:
         stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
@@ -821,16 +1168,62 @@ async def update_file(cid: str, file: UploadFile = File(...)):
         if db_item.type != "file":
             raise HTTPException(status_code=400, detail="只能更新文件类型的内容")
         
-        filepath = os.path.join(DATA_DIR, cid)
-        file_content = await file.read()
+        old_file_stmt = select(ClipboardFile).where(ClipboardFile.item_id == cid)
+        old_files = db.execute(old_file_stmt).scalars().all()
         
-        async with aiofiles.open(filepath, "wb") as f:
-            await f.write(file_content)
+        for old_file in old_files:
+            filepath = os.path.join(DATA_DIR, old_file.stored_filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
         
-        db_item.filename = file.filename
-        db_item.file_size = len(file_content)
+        delete_old_stmt = delete(ClipboardFile).where(ClipboardFile.item_id == cid)
+        db.execute(delete_old_stmt)
+        
+        total_size = 0
+        first_filename = None
+        new_file_records = []
+        created_at = datetime.now()
+        
+        for file in files:
+            stored_filename = generate_stored_filename()
+            filepath = os.path.join(DATA_DIR, stored_filename)
+            file_content = await file.read()
+            
+            async with aiofiles.open(filepath, "wb") as f:
+                await f.write(file_content)
+            
+            total_size += len(file_content)
+            if first_filename is None:
+                first_filename = file.filename
+            
+            file_record = ClipboardFile(
+                item_id=cid,
+                filename=file.filename or "unknown",
+                original_path=None,
+                file_size=len(file_content),
+                stored_filename=stored_filename,
+                created_at=created_at
+            )
+            new_file_records.append(file_record)
+            db.add(file_record)
+        
+        db_item.filename = first_filename
+        db_item.file_size = total_size
+        db_item.file_count = len(files)
+        
         db.commit()
         db.refresh(db_item)
+        
+        response_files = []
+        for fr in new_file_records:
+            db.refresh(fr)
+            response_files.append(ClipboardFileResponse(
+                id=fr.id,
+                filename=fr.filename,
+                original_path=fr.original_path,
+                file_size=fr.file_size,
+                stored_filename=fr.stored_filename
+            ))
         
         return ClipboardResponse(
             id=db_item.id,
@@ -839,7 +1232,9 @@ async def update_file(cid: str, file: UploadFile = File(...)):
             updated_at=db_item.updated_at,
             expires_at=db_item.expires_at,
             filename=db_item.filename,
-            file_size=db_item.file_size
+            file_size=db_item.file_size,
+            file_count=db_item.file_count,
+            files=response_files
         )
 
 
@@ -877,6 +1272,19 @@ async def extend_expiration(cid: str, request: ExtendExpirationRequest):
                 content=db_item.content
             )
         else:
+            file_stmt = select(ClipboardFile).where(ClipboardFile.item_id == db_item.id)
+            files = db.execute(file_stmt).scalars().all()
+            
+            response_files = []
+            for f in files:
+                response_files.append(ClipboardFileResponse(
+                    id=f.id,
+                    filename=f.filename,
+                    original_path=f.original_path,
+                    file_size=f.file_size,
+                    stored_filename=f.stored_filename
+                ))
+            
             return ClipboardResponse(
                 id=db_item.id,
                 type=db_item.type,
@@ -884,7 +1292,9 @@ async def extend_expiration(cid: str, request: ExtendExpirationRequest):
                 updated_at=db_item.updated_at,
                 expires_at=db_item.expires_at,
                 filename=db_item.filename,
-                file_size=db_item.file_size
+                file_size=db_item.file_size,
+                file_count=db_item.file_count,
+                files=response_files if response_files else None
             )
 
 
