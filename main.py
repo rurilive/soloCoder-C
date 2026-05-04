@@ -2,6 +2,7 @@ import os
 import uuid
 import zipfile
 import io
+import json
 import aiofiles
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -645,10 +646,13 @@ async def index():
                 }
                 
                 const formData = new FormData();
+                const relativePaths = [];
                 for (let file of selectedFiles) {
                     formData.append('files', file);
+                    relativePaths.push(file.webkitRelativePath || '');
                 }
                 formData.append('expires_hours', expire);
+                formData.append('relative_paths', JSON.stringify(relativePaths));
                 
                 try {
                     const response = await fetch('/api/file', {
@@ -807,9 +811,12 @@ async def index():
                 }
                 
                 const formData = new FormData();
+                const relativePaths = [];
                 for (let file of editSelectedFiles) {
                     formData.append('files', file);
+                    relativePaths.push(file.webkitRelativePath || '');
                 }
+                formData.append('relative_paths', JSON.stringify(relativePaths));
                 
                 try {
                     const response = await fetch('/api/' + currentRetrievedId + '/file', {
@@ -913,11 +920,25 @@ async def save_text(item: ClipboardText):
 
 
 @app.post("/api/file", response_model=ClipboardResponse)
-async def save_file(files: list[UploadFile] = File(...), expires_hours: int = Form(24)):
+async def save_file(
+    files: list[UploadFile] = File(...),
+    expires_hours: int = Form(24),
+    relative_paths: Optional[str] = Form(None)
+):
     cleanup_expired()
     
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail="请至少选择一个文件")
+    
+    paths_list = []
+    if relative_paths:
+        try:
+            paths_list = json.loads(relative_paths)
+        except json.JSONDecodeError:
+            paths_list = []
+    
+    while len(paths_list) < len(files):
+        paths_list.append("")
     
     cid = generate_id()
     expires_at = get_expiration_time(expires_hours)
@@ -928,7 +949,7 @@ async def save_file(files: list[UploadFile] = File(...), expires_hours: int = Fo
     file_records = []
     
     with get_db() as db:
-        for file in files:
+        for idx, file in enumerate(files):
             stored_filename = generate_stored_filename()
             filepath = os.path.join(DATA_DIR, stored_filename)
             file_content = await file.read()
@@ -940,10 +961,14 @@ async def save_file(files: list[UploadFile] = File(...), expires_hours: int = Fo
             if first_filename is None:
                 first_filename = file.filename
             
+            original_path = paths_list[idx] if idx < len(paths_list) else ""
+            if not original_path:
+                original_path = file.filename
+            
             file_record = ClipboardFile(
                 item_id=cid,
                 filename=file.filename or "unknown",
-                original_path=None,
+                original_path=original_path,
                 file_size=len(file_content),
                 stored_filename=stored_filename,
                 created_at=created_at
@@ -1152,11 +1177,25 @@ async def update_text(cid: str, item: UpdateTextRequest):
 
 
 @app.put("/api/{cid}/file", response_model=ClipboardResponse)
-async def update_file(cid: str, files: list[UploadFile] = File(...)):
+async def update_file(
+    cid: str,
+    files: list[UploadFile] = File(...),
+    relative_paths: Optional[str] = Form(None)
+):
     cleanup_expired()
     
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail="请至少选择一个文件")
+    
+    paths_list = []
+    if relative_paths:
+        try:
+            paths_list = json.loads(relative_paths)
+        except json.JSONDecodeError:
+            paths_list = []
+    
+    while len(paths_list) < len(files):
+        paths_list.append("")
     
     with get_db() as db:
         stmt = select(ClipboardItem).where(ClipboardItem.id == cid)
@@ -1184,7 +1223,7 @@ async def update_file(cid: str, files: list[UploadFile] = File(...)):
         new_file_records = []
         created_at = datetime.now()
         
-        for file in files:
+        for idx, file in enumerate(files):
             stored_filename = generate_stored_filename()
             filepath = os.path.join(DATA_DIR, stored_filename)
             file_content = await file.read()
@@ -1196,10 +1235,14 @@ async def update_file(cid: str, files: list[UploadFile] = File(...)):
             if first_filename is None:
                 first_filename = file.filename
             
+            original_path = paths_list[idx] if idx < len(paths_list) else ""
+            if not original_path:
+                original_path = file.filename
+            
             file_record = ClipboardFile(
                 item_id=cid,
                 filename=file.filename or "unknown",
-                original_path=None,
+                original_path=original_path,
                 file_size=len(file_content),
                 stored_filename=stored_filename,
                 created_at=created_at
