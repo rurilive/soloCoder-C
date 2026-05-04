@@ -11,6 +11,10 @@ from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, s
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
+from alembic.config import Config
+from alembic import command
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 
 app = FastAPI(title="网络剪切板", description="临时存储文字和文件的网络剪切板")
 
@@ -59,8 +63,12 @@ def get_db():
         db.close()
 
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
+def run_migrations():
+    alembic_cfg = Config(os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini"))
+    
+    command.upgrade(alembic_cfg, "head")
+    
+    print("Database migrations completed successfully.")
 
 
 class ClipboardText(BaseModel):
@@ -517,7 +525,7 @@ def find_available_port(start_port: int = 3333, max_attempts: int = 10) -> int:
 if __name__ == "__main__":
     import uvicorn
     
-    init_db()
+    run_migrations()
     
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 3333))
