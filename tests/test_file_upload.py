@@ -2,6 +2,7 @@ import os
 import tempfile
 import shutil
 import asyncio
+import json
 from pathlib import Path
 from datetime import datetime
 import pytest
@@ -40,6 +41,9 @@ def test_folder(temp_test_dir):
     subfolder = folder_path / "subfolder"
     subfolder.mkdir()
     
+    deep_folder = subfolder / "deep"
+    deep_folder.mkdir()
+    
     file_a = folder_path / "a.txt"
     file_a.write_text("Content of a.txt in root folder")
     
@@ -49,12 +53,16 @@ def test_folder(temp_test_dir):
     file_c = folder_path / "c.txt"
     file_c.write_text("Content of c.txt")
     
+    file_d = deep_folder / "d.txt"
+    file_d.write_text("Content of d.txt in deep folder")
+    
     return {
         "root": str(folder_path),
         "files": {
-            "a.txt": str(file_a),
-            "subfolder/b.txt": str(file_b),
-            "c.txt": str(file_c)
+            "test_folder/a.txt": str(file_a),
+            "test_folder/subfolder/b.txt": str(file_b),
+            "test_folder/c.txt": str(file_c),
+            "test_folder/subfolder/deep/d.txt": str(file_d)
         }
     }
 
@@ -260,4 +268,179 @@ async def test_file_download():
                 shutil.rmtree(test_dir, ignore_errors=True)
         
         finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_file_list_shows_relative_paths():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+        
+        try:
+            await page.goto(BASE_URL)
+            
+            test_dir = tempfile.mkdtemp()
+            try:
+                folder = Path(test_dir) / "myfolder"
+                folder.mkdir()
+                subfolder = folder / "sub"
+                subfolder.mkdir()
+                
+                file1 = folder / "file1.txt"
+                file1.write_text("File 1 content")
+                
+                file2 = subfolder / "file2.txt"
+                file2.write_text("File 2 content")
+                
+                relative_paths = json.dumps([
+                    "myfolder/file1.txt",
+                    "myfolder/sub/file2.txt"
+                ])
+                
+                upload_js = f"""
+                (async () => {{
+                    const formData = new FormData();
+                    
+                    const file1 = new File(['File 1 content'], 'file1.txt', {{ type: 'text/plain' }});
+                    const file2 = new File(['File 2 content'], 'file2.txt', {{ type: 'text/plain' }});
+                    
+                    formData.append('files', file1);
+                    formData.append('files', file2);
+                    formData.append('expires_hours', '1');
+                    formData.append('relative_paths', {json.dumps(relative_paths)});
+                    
+                    const response = await fetch('/api/file', {{
+                        method: 'POST',
+                        body: formData
+                    }});
+                    
+                    return await response.json();
+                }})();
+                """
+                
+                result = await page.evaluate(upload_js)
+                
+                assert "id" in result, f"Upload failed: {result}"
+                assert result["type"] == "file"
+                assert result["file_count"] == 2
+                
+                item_id = result["id"]
+                
+                retrieve_js = f"""
+                (async () => {{
+                    const response = await fetch('/api/{item_id}');
+                    return await response.json();
+                }})();
+                """
+                
+                retrieve_result = await page.evaluate(retrieve_js)
+                
+                assert retrieve_result["file_count"] == 2
+                assert len(retrieve_result["files"]) == 2
+                
+                original_paths = [f["original_path"] for f in retrieve_result["files"]]
+                assert "myfolder/file1.txt" in original_paths, f"Paths: {original_paths}"
+                assert "myfolder/sub/file2.txt" in original_paths, f"Paths: {original_paths}"
+                
+                print(f"✓ 相对路径存储测试成功！存储的路径：{original_paths}")
+                
+            finally:
+                shutil.rmtree(test_dir, ignore_errors=True)
+        
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_recursive_folder_upload_simulation():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+        
+        test_dir = tempfile.mkdtemp()
+        try:
+            folder = Path(test_dir) / "upload_folder"
+            folder.mkdir()
+            
+            subfolder = folder / "sub"
+            subfolder.mkdir()
+            
+            deep_folder = subfolder / "deep"
+            deep_folder.mkdir()
+            
+            file1 = folder / "root_file.txt"
+            file1.write_text("Root file content")
+            
+            file2 = subfolder / "sub_file.txt"
+            file2.write_text("Subfolder file content")
+            
+            file3 = deep_folder / "deep_file.txt"
+            file3.write_text("Deep folder file content")
+            
+            relative_paths = json.dumps([
+                "upload_folder/root_file.txt",
+                "upload_folder/sub/sub_file.txt",
+                "upload_folder/sub/deep/deep_file.txt"
+            ])
+            
+            upload_js = f"""
+            (async () => {{
+                const formData = new FormData();
+                
+                const file1 = new File(['Root file content'], 'root_file.txt', {{ type: 'text/plain' }});
+                const file2 = new File(['Subfolder file content'], 'sub_file.txt', {{ type: 'text/plain' }});
+                const file3 = new File(['Deep folder file content'], 'deep_file.txt', {{ type: 'text/plain' }});
+                
+                formData.append('files', file1);
+                formData.append('files', file2);
+                formData.append('files', file3);
+                formData.append('expires_hours', '1');
+                formData.append('relative_paths', {json.dumps(relative_paths)});
+                
+                const response = await fetch('/api/file', {{
+                    method: 'POST',
+                    body: formData
+                }});
+                
+                return await response.json();
+            }})();
+            """
+            
+            await page.goto(BASE_URL)
+            
+            result = await page.evaluate(upload_js)
+            
+            assert "id" in result, f"Upload failed: {result}"
+            assert result["type"] == "file"
+            assert result["file_count"] == 3, f"Expected 3 files, got {result['file_count']}"
+            
+            item_id = result["id"]
+            
+            retrieve_js = f"""
+            (async () => {{
+                const response = await fetch('/api/{item_id}');
+                return await response.json();
+            }})();
+            """
+            
+            retrieve_result = await page.evaluate(retrieve_js)
+            
+            assert retrieve_result["file_count"] == 3
+            assert len(retrieve_result["files"]) == 3
+            
+            original_paths = [f["original_path"] for f in retrieve_result["files"]]
+            
+            assert "upload_folder/root_file.txt" in original_paths, f"Paths: {original_paths}"
+            assert "upload_folder/sub/sub_file.txt" in original_paths, f"Paths: {original_paths}"
+            assert "upload_folder/sub/deep/deep_file.txt" in original_paths, f"Paths: {original_paths}"
+            
+            print(f"✓ 文件夹递归上传测试成功！上传了 {len(original_paths)} 个文件：")
+            for path in sorted(original_paths):
+                print(f"  - {path}")
+            
+        finally:
+            shutil.rmtree(test_dir, ignore_errors=True)
             await browser.close()

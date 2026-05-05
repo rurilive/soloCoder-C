@@ -461,11 +461,12 @@ async def index():
                     const file = files[i];
                     const icon = getFileIcon(file.name);
                     const size = formatSize(file.size);
+                    const displayName = file.webkitRelativePath || file.name;
                     html += `
                         <div class="file-item">
                             <div class="file-item-info">
                                 <span class="file-icon">${icon}</span>
-                                <span class="file-name">${file.name}</span>
+                                <span class="file-name" title="${displayName}">${displayName}</span>
                                 <span class="file-size">${size}</span>
                             </div>
                         </div>
@@ -484,14 +485,15 @@ async def index():
                 
                 let html = '';
                 for (let file of files) {
-                    const icon = getFileIcon(file.filename);
+                    const displayName = file.original_path || file.filename;
+                    const icon = getFileIcon(displayName);
                     const size = formatSize(file.file_size);
                     const downloadUrl = `/api/${itemId}/file/${file.id}/download`;
                     html += `
                         <div class="file-item">
                             <div class="file-item-info">
                                 <span class="file-icon">${icon}</span>
-                                <span class="file-name">${file.filename}</span>
+                                <span class="file-name" title="${displayName}">${displayName}</span>
                                 <span class="file-size">${size}</span>
                             </div>
                             <button class="file-download-btn" onclick="window.open('${downloadUrl}', '_blank')">下载</button>
